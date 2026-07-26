@@ -175,10 +175,27 @@
           </div>
 
           <div id="toolLevel" class="tool-body hidden">
-            <div class="level-face">
+            <div class="level-mode-toggle" role="tablist">
+              <button class="level-mode-btn active" data-level-mode="flat" type="button">Flat</button>
+              <button class="level-mode-btn" data-level-mode="edge-short" type="button">Short edge</button>
+              <button class="level-mode-btn" data-level-mode="edge-long" type="button">Long edge</button>
+            </div>
+
+            <div id="levelFlatFace" class="level-face">
               <div class="level-crosshair"></div>
               <div id="levelBubble" class="level-bubble"></div>
             </div>
+
+            <div id="levelEdgeFace" class="level-tube-face hidden">
+              <div class="level-tube">
+                <div class="level-tube-marks">
+                  <span></span><span></span><span class="mid"></span><span></span><span></span>
+                </div>
+                <div id="levelTubeBubble" class="level-tube-bubble"></div>
+              </div>
+              <p id="levelEdgeOrientation" class="level-edge-orientation">—</p>
+            </div>
+
             <p id="levelReadout" class="tool-readout">0.0° / 0.0°</p>
             <p id="levelHint" class="settings-hint">Lay the phone flat, or stand it on edge and point the top at the sky.</p>
           </div>

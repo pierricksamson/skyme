@@ -759,9 +759,69 @@
   }
 
   // ---- Level ----
+  let levelMode = 'flat'; // 'flat' | 'edge-short' | 'edge-long'
+
+  // Renvoie l'angle d'orientation de l'écran (0/90/180/270), tous navigateurs.
+  // Utilisé uniquement pour lever l'ambiguïté gauche/droite en mode "côté long"
+  // (paysage posé sur l'oreille gauche vs droite) — pas pour choisir court/long,
+  // qui est un choix explicite de l'utilisateur (boutons Short edge / Long edge).
+  function getScreenOrientationAngle() {
+    if (screen.orientation && typeof screen.orientation.angle === 'number') {
+      return screen.orientation.angle;
+    }
+    if (typeof window.orientation === 'number') {
+      return ((window.orientation % 360) + 360) % 360;
+    }
+    return 0;
+  }
+
+  // Convertit beta/gamma (repère capteur) en front/side (repère utilisateur),
+  // selon le mode choisi explicitement.
+  //  - edge-short : téléphone debout en portrait, posé sur la tranche courte
+  //                 (bord bas), on vise avec le bord haut.
+  //  - edge-long  : téléphone debout en paysage, posé sur la tranche longue.
+  function getEdgeTilt(mode, beta, gamma) {
+    if (mode === 'edge-short') {
+      // Portrait : gère aussi le cas "tête en bas" (angle 180).
+      const angle = getScreenOrientationAngle();
+      return angle === 180 ? { front: -beta, side: -gamma } : { front: beta, side: gamma };
+    }
+    // edge-long : paysage, posé sur la tranche longue. On garde le choix
+    // "long" fait par l'utilisateur, l'angle sert juste à choisir le bon signe
+    // selon que le tél est tourné vers la gauche (90°) ou la droite (270°).
+    const angle = getScreenOrientationAngle();
+    return angle === 270 ? { front: gamma, side: -beta } : { front: -gamma, side: beta };
+  }
+
+  function edgeOrientationLabel(mode) {
+    return mode === 'edge-long'
+      ? 'Landscape · resting on long edge'
+      : 'Portrait · resting on short edge';
+  }
+
+  function setLevelMode(mode) {
+    levelMode = mode;
+    document.querySelectorAll('.level-mode-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.levelMode === mode);
+    });
+    document.getElementById('levelFlatFace').classList.toggle('hidden', mode !== 'flat');
+    document.getElementById('levelEdgeFace').classList.toggle('hidden', mode === 'flat');
+    document.getElementById('levelHint').textContent = mode === 'flat'
+      ? 'Lay the phone flat, screen up.'
+      : mode === 'edge-short'
+        ? 'Stand the phone up in portrait, resting on its short (bottom) edge, and point the top at the sky.'
+        : 'Stand the phone up in landscape, resting on its long edge, and point the top at the sky.';
+  }
+
+  document.querySelectorAll('.level-mode-btn').forEach((btn) => {
+    btn.addEventListener('click', () => setLevelMode(btn.dataset.levelMode));
+  });
+
   async function startLevel() {
     const hint = document.getElementById('levelHint');
     const bubble = document.getElementById('levelBubble');
+    const tubeBubble = document.getElementById('levelTubeBubble');
+    const edgeOrientationEl = document.getElementById('levelEdgeOrientation');
     const readout = document.getElementById('levelReadout');
 
     if (typeof DeviceOrientationEvent === 'undefined') {
@@ -774,23 +834,48 @@
       return;
     }
 
-    const maxOffset = 90; // px bubble can travel from center
+    setLevelMode(levelMode);
+
+    const maxOffset = 90;      // px, mode plat: déplacement max de la bulle depuis le centre
+    const tubeMaxOffset = 82;  // px, mode tranche: déplacement max le long du tube
+    const okTolerance = 1.5;   // degrés
+
     motionLevelHandler = (e) => {
-      const beta = e.beta || 0;   // front-back tilt, -180..180
-      const gamma = e.gamma || 0; // left-right tilt, -90..90
+      const rawBeta = e.beta || 0;   // -180..180
+      const rawGamma = e.gamma || 0; // -90..90
 
-      const clampedBeta = Math.max(-45, Math.min(45, beta));
-      const clampedGamma = Math.max(-45, Math.min(45, gamma));
+      if (levelMode === 'flat') {
+        const clampedBeta = Math.max(-45, Math.min(45, rawBeta));
+        const clampedGamma = Math.max(-45, Math.min(45, rawGamma));
 
-      const x = (clampedGamma / 45) * maxOffset;
-      const y = (clampedBeta / 45) * maxOffset;
+        const x = (clampedGamma / 45) * maxOffset;
+        const y = (clampedBeta / 45) * maxOffset;
 
-      bubble.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+        bubble.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
 
-      const isFlat = Math.abs(beta) < 1.5 && Math.abs(gamma) < 1.5;
-      bubble.classList.toggle('level-ok', isFlat);
+        const isFlat = Math.abs(rawBeta) < okTolerance && Math.abs(rawGamma) < okTolerance;
+        bubble.classList.toggle('level-ok', isFlat);
 
-      readout.textContent = `${beta.toFixed(1)}° / ${gamma.toFixed(1)}°`;
+        readout.textContent = `${rawBeta.toFixed(1)}° / ${rawGamma.toFixed(1)}°`;
+        return;
+      }
+
+      // Mode tranche (edge / niveau de côté), choisi explicitement par
+      // l'utilisateur : court (portrait) ou long (paysage). `front` =
+      // inclinaison avant/arrière depuis la verticale (0° = parfaitement
+      // vertical) ; `side` = roulis gauche/droite (0° = à plomb).
+      const { front, side } = getEdgeTilt(levelMode, rawBeta, rawGamma);
+      const tiltFromVertical = Math.abs(front) - 90; // 0° quand le tél est vertical
+
+      const clampedSide = Math.max(-45, Math.min(45, side));
+      const x = (clampedSide / 45) * tubeMaxOffset;
+      tubeBubble.style.transform = `translate(calc(-50% + ${x}px), -50%)`;
+
+      const isPlumb = Math.abs(side) < okTolerance;
+      tubeBubble.classList.toggle('level-ok', isPlumb);
+
+      edgeOrientationEl.textContent = edgeOrientationLabel(levelMode);
+      readout.textContent = `${tiltFromVertical.toFixed(1)}° from vertical / ${side.toFixed(1)}° roll`;
     };
     window.addEventListener('deviceorientation', motionLevelHandler);
   }

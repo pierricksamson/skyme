@@ -815,6 +815,89 @@ body {
   box-shadow: 0 0 14px rgba(111,191,115,0.6);
 }
 
+/* Level mode toggle */
+.level-mode-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+.level-mode-btn {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary, #9a9a9a);
+  font-size: 13px;
+  cursor: pointer;
+}
+.level-mode-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Level - edge/tube mode (niveau de côté, tranche courte ou longue) */
+.level-tube-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.level-tube {
+  position: relative;
+  width: 220px;
+  height: 56px;
+  border-radius: 28px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.level-tube-marks {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+}
+.level-tube-marks span {
+  width: 1px;
+  height: 16px;
+  background: var(--hairline);
+}
+.level-tube-marks span.mid {
+  width: 1px;
+  height: 100%;
+  background: var(--hairline);
+  opacity: 0.6;
+}
+.level-tube-bubble {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 0 14px rgba(212,175,106,0.5);
+  transform: translate(-50%, -50%);
+  transition: transform 0.08s linear;
+}
+.level-tube-bubble.level-ok {
+  border-color: #6fbf73;
+  box-shadow: 0 0 14px rgba(111,191,115,0.6);
+}
+.level-edge-orientation {
+  font-size: 12px;
+  color: var(--text-secondary, #9a9a9a);
+  letter-spacing: 0.02em;
+}
+
 /* Polar clock */
 .polar-face {
   width: 200px;
