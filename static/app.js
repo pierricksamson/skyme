@@ -636,6 +636,7 @@
   function stopActiveTool() {
     if (orientationHandler) {
       window.removeEventListener('deviceorientation', orientationHandler);
+      window.removeEventListener('deviceorientationabsolute', orientationHandler); // AJOUT
       orientationHandler = null;
     }
     if (motionLevelHandler) {
@@ -677,10 +678,39 @@
   toolPanelClose.addEventListener('click', stopActiveTool);
 
   // ---- Compass ----
-  async function startCompass() {
-    const hint = document.getElementById('compassHint');
+  let compassSmoothedRotation = null; // rotation continue (non modulo) appliquée au cadran
+  let compassUsingAbsolute = false;
+
+  function shortestDeltaDeg(from, to) {
+    // Plus petit delta signé pour aller de `from` à `to`, dans (-180, 180]
+    let d = (to - from) % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return d;
+  }
+
+  function handleCompassHeading(heading) {
     const dial = document.getElementById('compassDial');
     const readout = document.getElementById('compassHeading');
+    if (heading === null || isNaN(heading)) return;
+    heading = ((heading % 360) + 360) % 360;
+
+    const targetRotation = -heading;
+    if (compassSmoothedRotation === null) {
+      compassSmoothedRotation = targetRotation;
+    } else {
+      // On avance par le plus court chemin au lieu de sauter à targetRotation,
+      // ce qui causait le "tour dans l'autre sens" près de 359°/0°.
+      const delta = shortestDeltaDeg(compassSmoothedRotation, targetRotation);
+      compassSmoothedRotation += delta;
+    }
+
+    dial.style.transform = `rotate(${compassSmoothedRotation}deg)`;
+    readout.textContent = `${Math.round(heading)}° ${headingLabel(heading)}`;
+  }
+
+  async function startCompass() {
+    const hint = document.getElementById('compassHint');
 
     if (typeof DeviceOrientationEvent === 'undefined') {
       hint.textContent = 'Orientation sensors are not supported on this device.';
@@ -693,25 +723,33 @@
       return;
     }
     hint.textContent = 'Hold the phone flat, screen up.';
+    compassSmoothedRotation = null;
+    compassUsingAbsolute = false;
 
     orientationHandler = (e) => {
-      let heading = null;
+      // iOS: webkitCompassHeading est déjà un cap vrai/magnétique, CW depuis le Nord.
       if (typeof e.webkitCompassHeading === 'number') {
-        heading = e.webkitCompassHeading; // iOS: already true/magnetic heading, CW from N
-      } else if (e.alpha !== null) {
-        heading = 360 - e.alpha; // Android: alpha increases CCW from N
+        handleCompassHeading(e.webkitCompassHeading);
+        return;
       }
-      if (heading === null || isNaN(heading)) return;
-      heading = ((heading % 360) + 360) % 360;
-      dial.style.transform = `rotate(${-heading}deg)`;
-      readout.textContent = `${Math.round(heading)}° ${headingLabel(heading)}`;
-    };
-    window.addEventListener('deviceorientation', orientationHandler);
-  }
 
-  function headingLabel(deg) {
-    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-    return dirs[Math.round(deg / 45) % 8];
+      // Android/autres via 'deviceorientation' classique : e.alpha n'est un vrai
+      // cap "nord" QUE si le navigateur marque l'event comme absolute.
+      // Sinon c'est relatif à l'orientation du téléphone au chargement de la page
+      // — c'est exactement pour ça que ton "nord" était faux.
+      if (e.absolute === true && e.alpha !== null) {
+        compassUsingAbsolute = true;
+        handleCompassHeading(360 - e.alpha);
+      } else if (!compassUsingAbsolute && e.alpha !== null) {
+        hint.textContent = 'Cap approximatif uniquement — cet appareil/navigateur n\u2019expose pas le vrai nord.';
+        handleCompassHeading(360 - e.alpha);
+      }
+    };
+
+    // On privilégie l'event "absolute" quand le navigateur le supporte
+    // (donne un vrai cap magnétique sur Android/Chrome).
+    window.addEventListener('deviceorientationabsolute', orientationHandler);
+    window.addEventListener('deviceorientation', orientationHandler);
   }
 
   // ---- Level ----
