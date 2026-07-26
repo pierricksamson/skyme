@@ -38,6 +38,8 @@
 
   let currentData = null;
   let nowLineTimer = null;
+  let infoObj = null;
+  let infoCountdownTimer = null;
 
   const AGENDA_DAYS = 30;
 
@@ -126,6 +128,40 @@
   }
 
   function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function formatCountdownMs(ms) {
+    if (ms < 0) ms = 0;
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  }
+
+  function updateInfoCountdown() {
+    if (!infoObj || !infoObj.rise_iso || !infoObj.set_iso) return;
+    const now = Date.now();
+    const riseT = new Date(infoObj.rise_iso).getTime();
+    const setT = new Date(infoObj.set_iso).getTime();
+    const label = document.getElementById('infoCountdownLabel');
+    const value = document.getElementById('infoCountdown');
+    if (!label || !value) return;
+
+    let diffMs;
+    if (now < riseT) {
+      label.textContent = 'Se lève dans';
+      diffMs = riseT - now;
+    } else if (now <= setT) {
+      label.textContent = 'Se couche dans';
+      diffMs = setT - now;
+    } else {
+      label.textContent = 'Couché';
+      diffMs = 0;
+    }
+    value.textContent = formatCountdownMs(diffMs);
+  }
 
   function setStatus(msg) { statusText.textContent = msg; }
 
@@ -601,21 +637,40 @@
   }
 
   function openInfo(o) {
-    document.getElementById('infoDot').style.background = o.color;
-    document.getElementById('infoDot').style.color = o.color;
+    infoObj = o;
+    const color = o.color || CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
+    document.getElementById('infoDot').style.background = color;
+    document.getElementById('infoDot').style.color = color;
     document.getElementById('infoName').textContent = o.name;
-    document.getElementById('infoCategory').textContent = capitalize(o.category);
-    document.getElementById('infoRise').textContent = fmtTime(o.rise_iso);
-    document.getElementById('infoSet').textContent = fmtTime(o.set_iso);
-    document.getElementById('infoDuration').textContent = fmtDuration(o.duration_min);
-    document.getElementById('infoAlt').textContent = `${o.peak_altitude}°`;
+    document.getElementById('infoCategory').textContent = CATEGORY_LABEL[o.category] || capitalize(o.category);
+
+    const hasWindow = !!(o.rise_iso && o.set_iso);
+    document.getElementById('infoRise').textContent = hasWindow ? fmtTime(o.rise_iso) : '--:--';
+    document.getElementById('infoSet').textContent = hasWindow ? fmtTime(o.set_iso) : '--:--';
+    document.getElementById('infoDuration').textContent = hasWindow ? fmtDuration(o.duration_min) : '—';
+    document.getElementById('infoAlt').textContent =
+      (o.peak_altitude !== undefined && o.peak_altitude !== null) ? `${o.peak_altitude}°` : '—';
     document.getElementById('infoMag').textContent = (o.magnitude !== null && o.magnitude !== undefined)
       ? `mag ${o.magnitude}` : 'n/a';
+
+    const countdownCell = document.getElementById('infoCountdownCell');
+    if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
+
+    if (hasWindow) {
+      countdownCell.classList.remove('hidden');
+      updateInfoCountdown();
+      infoCountdownTimer = setInterval(updateInfoCountdown, 1000);
+    } else {
+      countdownCell.classList.add('hidden');
+    }
+
     document.getElementById('infoOverlay').classList.remove('hidden');
   }
 
   function closeInfo() {
     document.getElementById('infoOverlay').classList.add('hidden');
+    if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
+    infoObj = null;
   }
 
   document.getElementById('infoClose').addEventListener('click', closeInfo);
@@ -630,6 +685,9 @@
     if (name === 'timeline' && currentData) {
       renderTimeline(currentData);
       positionNowLine(currentData);
+    }
+    if (name === 'library') {
+      initLibraryView();
     }
     if (name !== 'tools') {
       stopActiveTool();
@@ -929,6 +987,122 @@
           <span class="breakdown-value">${stats.counts[k]}</span>
         </div>
       `).join('');
+  }
+
+  // ---------- Library: searchable/filterable catalog list ----------
+  const CATEGORY_COLOR_VAR = {
+    moon: 'var(--c-moon)',
+    planet: 'var(--c-planet)',
+    star: 'var(--c-star)',
+    galaxy: 'var(--c-galaxy)',
+    nebula: 'var(--c-nebula)',
+    cluster: 'var(--c-cluster)',
+  };
+  const CATEGORY_LABEL = {
+    moon: 'Lune',
+    planet: 'Planète',
+    star: 'Étoile',
+    galaxy: 'Galaxie',
+    nebula: 'Nébuleuse',
+    cluster: 'Amas',
+  };
+
+  let catalogList = null;
+  let libActiveCategory = 'all';
+  let libSearchTerm = '';
+
+  function normalizeSearch(s) {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  async function fetchCatalogListOnce() {
+    if (catalogList) return catalogList;
+    try {
+      const res = await fetch('/api/catalog/list');
+      if (!res.ok) return null;
+      const data = await res.json();
+      catalogList = data.items;
+      return catalogList;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function renderLibraryList() {
+    const listEl = document.getElementById('libList');
+    const countEl = document.getElementById('libCount');
+    if (!listEl) return;
+
+    if (!catalogList) {
+      listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
+      countEl.textContent = '—';
+      return;
+    }
+
+    const term = normalizeSearch(libSearchTerm.trim());
+    const filtered = catalogList.filter((o) => {
+      if (libActiveCategory !== 'all' && o.category !== libActiveCategory) return false;
+      if (term && !normalizeSearch(o.name).includes(term)) return false;
+      return true;
+    });
+
+    countEl.textContent = `${filtered.length} objet${filtered.length > 1 ? 's' : ''}`;
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="lib-empty">Aucun objet ne correspond.</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map((o) => {
+      const color = CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
+      const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
+      const nameAttr = o.name.replace(/"/g, '&quot;');
+      return `
+        <div class="lib-row lib-row-clickable" data-name="${nameAttr}">
+          <span class="lib-row-dot" style="background:${color}"></span>
+          <span class="lib-row-main">
+            <span class="lib-row-name">${o.name}</span>
+            <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
+          </span>
+          <span class="lib-row-mag">${magStr}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function initLibraryView() {
+    await fetchCatalogListOnce();
+    renderLibraryList();
+  }
+
+  const libSearchInput = document.getElementById('libSearchInput');
+  if (libSearchInput) {
+    libSearchInput.addEventListener('input', () => {
+      libSearchTerm = libSearchInput.value;
+      renderLibraryList();
+    });
+  }
+
+  document.querySelectorAll('.lib-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      libActiveCategory = chip.dataset.cat;
+      document.querySelectorAll('.lib-chip').forEach((c) => c.classList.toggle('active', c === chip));
+      renderLibraryList();
+    });
+  });
+
+  const libListEl = document.getElementById('libList');
+  if (libListEl) {
+    libListEl.addEventListener('click', (e) => {
+      const row = e.target.closest('.lib-row');
+      if (!row || !row.dataset.name) return;
+      const catalogItem = catalogList && catalogList.find((o) => o.name === row.dataset.name);
+      if (!catalogItem) return;
+      const liveMatch = currentData && currentData.objects
+        ? currentData.objects.find((obj) => obj.name === catalogItem.name)
+        : null;
+      openInfo(liveMatch || catalogItem);
+    });
   }
 
   // ========================================================================

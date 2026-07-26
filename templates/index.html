@@ -117,6 +117,24 @@
         <div id="libraryBreakdown" class="library-breakdown"></div>
       </section>
 
+      <section id="view-library" class="view hidden">
+        <div class="section-heading"><h2>Bibliothèque</h2></div>
+        <div class="lib-search-row">
+          <input type="text" id="libSearchInput" class="lib-search-input" placeholder="Rechercher un objet…" autocomplete="off">
+        </div>
+        <div id="libFilterChips" class="lib-filter-chips">
+          <button type="button" class="lib-chip active" data-cat="all">Tout</button>
+          <button type="button" class="lib-chip" data-cat="moon">Lune</button>
+          <button type="button" class="lib-chip" data-cat="planet">Planètes</button>
+          <button type="button" class="lib-chip" data-cat="star">Étoiles</button>
+          <button type="button" class="lib-chip" data-cat="galaxy">Galaxies</button>
+          <button type="button" class="lib-chip" data-cat="nebula">Nébuleuses</button>
+          <button type="button" class="lib-chip" data-cat="cluster">Amas</button>
+        </div>
+        <p id="libCount" class="lib-count">—</p>
+        <div id="libList" class="lib-list"></div>
+      </section>
+
       <section id="view-agenda" class="view hidden">
         <div class="section-heading"><h2>Agenda</h2></div>
         <p class="agenda-intro">Tap a night to load its sky.</p>
@@ -350,6 +368,10 @@
         <i class='bx bx-star'></i>
         <span>Overview</span>
       </button>
+      <button class="nav-btn" data-view="library">
+        <i class='bx bx-book-open'></i>
+        <span>Library</span>
+      </button>
       <button class="nav-btn" data-view="agenda">
         <i class='bx bx-calendar'></i>
         <span>Agenda</span>
@@ -374,6 +396,10 @@
             <span id="infoCategory" class="info-category">—</span>
           </div>
           <button id="infoClose" class="info-close">✕</button>
+        </div>
+        <div class="info-cell info-cell-wide" id="infoCountdownCell">
+          <span class="info-label" id="infoCountdownLabel">Se couche dans</span>
+          <span id="infoCountdown" class="info-value info-countdown">--:--:--</span>
         </div>
         <div class="info-grid">
           <div class="info-cell">

@@ -345,6 +345,48 @@ def sky():
     })
 
 
+@app.route("/api/catalog/list")
+@login_required
+def catalog_list():
+    items = [{
+        "name": "Moon",
+        "category": "moon",
+        "magnitude": None,
+        "ra": None,
+        "dec": None,
+    }]
+
+    for pname in PLANET_MAG:
+        items.append({
+            "name": pname,
+            "category": "planet",
+            "magnitude": PLANET_MAG[pname],
+            "ra": None,
+            "dec": None,
+        })
+
+    for name, ra, dec, mag in STARS:
+        items.append({
+            "name": name,
+            "category": "star",
+            "magnitude": mag,
+            "ra": round(ra, 4),
+            "dec": round(dec, 4),
+        })
+
+    for name, ra, dec, mag, kind in DEEP_SKY:
+        items.append({
+            "name": name,
+            "category": kind,
+            "magnitude": mag,
+            "ra": round(ra, 4),
+            "dec": round(dec, 4),
+        })
+
+    items.sort(key=lambda o: o["name"])
+    return jsonify({"items": items})
+
+
 @app.route("/api/catalog/stats")
 @login_required
 def catalog_stats():
