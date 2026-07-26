@@ -948,9 +948,9 @@ body {
   letter-spacing: 0.03em;
   padding-top: 10px;
 }
-.nav-btn svg { color: var(--text-muted); }
+.nav-btn svg, .nav-btn i { color: var(--text-muted); font-size: 20px; }
 .nav-btn.active { color: var(--accent); }
-.nav-btn.active svg { color: var(--accent); filter: drop-shadow(0 0 4px rgba(212,175,106,0.5)); }
+.nav-btn.active svg, .nav-btn.active i { color: var(--accent); filter: drop-shadow(0 0 4px rgba(212,175,106,0.5)); }
 
 /* ---------- Info popup (bottom sheet) ---------- */
 .info-overlay {
