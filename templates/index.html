@@ -128,6 +128,71 @@
         </div>
       </section>
 
+      <section id="view-tools" class="view hidden">
+        <div class="section-heading"><h2>Tools</h2></div>
+
+        <div class="tools-grid">
+          <button class="tool-card" data-tool="compass">
+            <span class="tool-icon">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10.5" stroke="currentColor" stroke-width="1.3"/><path d="M13 5.5l2.6 6.4-2.6 1.6-2.6-1.6z" fill="currentColor"/><path d="M13 20.5l-2.6-6.4 2.6-1.6 2.6 1.6z" fill="currentColor" opacity="0.35"/></svg>
+            </span>
+            <span class="tool-name">Compass</span>
+          </button>
+
+          <button class="tool-card" data-tool="level">
+            <span class="tool-icon">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="2.5" y="10.5" width="21" height="5" rx="2.5" stroke="currentColor" stroke-width="1.3"/><circle cx="13" cy="13" r="2.3" stroke="currentColor" stroke-width="1.3"/></svg>
+            </span>
+            <span class="tool-name">Level</span>
+          </button>
+
+          <button class="tool-card" data-tool="polar">
+            <span class="tool-icon">
+              <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="10.5" stroke="currentColor" stroke-width="1.3"/><path d="M13 13V6.5M13 13l4.2 2.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="13" cy="13" r="1.1" fill="currentColor"/></svg>
+            </span>
+            <span class="tool-name">Polar Clock</span>
+          </button>
+        </div>
+
+        <div id="toolPanel" class="tool-panel hidden">
+          <div class="tool-panel-header">
+            <h3 id="toolPanelTitle">—</h3>
+            <button id="toolPanelClose" class="icon-btn">✕</button>
+          </div>
+
+          <div id="toolCompass" class="tool-body hidden">
+            <div class="compass-face">
+              <div id="compassDial" class="compass-dial">
+                <span class="compass-n">N</span>
+                <span class="compass-e">E</span>
+                <span class="compass-s">S</span>
+                <span class="compass-w">W</span>
+              </div>
+              <div class="compass-needle"></div>
+            </div>
+            <p id="compassHeading" class="tool-readout">—°</p>
+            <p id="compassHint" class="settings-hint">Tap to enable sensors.</p>
+          </div>
+
+          <div id="toolLevel" class="tool-body hidden">
+            <div class="level-face">
+              <div class="level-crosshair"></div>
+              <div id="levelBubble" class="level-bubble"></div>
+            </div>
+            <p id="levelReadout" class="tool-readout">0.0° / 0.0°</p>
+            <p id="levelHint" class="settings-hint">Lay the phone flat, or stand it on edge and point the top at the sky.</p>
+          </div>
+
+          <div id="toolPolar" class="tool-body hidden">
+            <div class="polar-face">
+              <svg id="polarClockSvg" viewBox="0 0 200 200" width="200" height="200"></svg>
+            </div>
+            <p id="polarReadout" class="tool-readout">—</p>
+            <p class="settings-hint">Position of Polaris around the North Celestial Pole right now — useful for polar-aligning a telescope mount.</p>
+          </div>
+        </div>
+      </section>
+
       <section id="view-settings" class="view hidden">
         <div class="section-heading"><h2>Paramètres</h2></div>
         
@@ -201,6 +266,10 @@
       <button class="nav-btn" data-view="agenda">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="4" width="14" height="13" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M3 8h14M7 2.5v3M13 2.5v3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
         <span>Agenda</span>
+      </button>
+      <button class="nav-btn" data-view="tools">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12.7 3.3l4 4-2 2-4-4 .6-.6a2 2 0 0 1 1.4-1.4zM10.7 5.3l-6 6a2.1 2.1 0 0 0 0 3l1 1a2.1 2.1 0 0 0 3 0l6-6" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="5.5" cy="14.5" r="1.1" fill="currentColor"/></svg>
+        <span>Tools</span>
       </button>
       <button class="nav-btn" data-view="settings">
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="2.6" stroke="currentColor" stroke-width="1.3"/><path d="M10 3.3v1.6M10 15.1v1.6M16.7 10h-1.6M4.9 10H3.3M14.7 5.3l-1.1 1.1M6.4 13.6l-1.1 1.1M14.7 14.7l-1.1-1.1M6.4 6.4L5.3 5.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>

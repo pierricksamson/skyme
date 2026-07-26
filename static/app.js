@@ -409,6 +409,9 @@
       renderTimeline(currentData);
       positionNowLine(currentData);
     }
+    if (name !== 'tools') {
+      stopActiveTool();
+    }
   }
 
   document.querySelectorAll('.nav-btn').forEach((btn) => {
@@ -595,6 +598,211 @@
           <span class="breakdown-value">${stats.counts[k]}</span>
         </div>
       `).join('');
+  }
+
+  // ========================================================================
+  // ---------- Tools: Compass / Level / Polar Clock ----------
+  // ========================================================================
+
+  const toolCards = document.querySelectorAll('.tool-card');
+  const toolPanel = document.getElementById('toolPanel');
+  const toolPanelTitle = document.getElementById('toolPanelTitle');
+  const toolPanelClose = document.getElementById('toolPanelClose');
+  const toolBodies = {
+    compass: document.getElementById('toolCompass'),
+    level: document.getElementById('toolLevel'),
+    polar: document.getElementById('toolPolar'),
+  };
+  const TOOL_TITLES = { compass: 'Compass', level: 'Level', polar: 'Polar Clock' };
+
+  let activeTool = null;
+  let polarTimer = null;
+  let orientationHandler = null;
+  let motionLevelHandler = null;
+
+  async function requestOrientationPermission() {
+    if (typeof DeviceOrientationEvent !== 'undefined' &&
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+      try {
+        const res = await DeviceOrientationEvent.requestPermission();
+        return res === 'granted';
+      } catch (e) {
+        return false;
+      }
+    }
+    return true; // Android / desktop: no explicit permission gate
+  }
+
+  function stopActiveTool() {
+    if (orientationHandler) {
+      window.removeEventListener('deviceorientation', orientationHandler);
+      orientationHandler = null;
+    }
+    if (motionLevelHandler) {
+      window.removeEventListener('deviceorientation', motionLevelHandler);
+      motionLevelHandler = null;
+    }
+    if (polarTimer) {
+      clearInterval(polarTimer);
+      polarTimer = null;
+    }
+    activeTool = null;
+    toolPanel.classList.add('hidden');
+    Object.values(toolBodies).forEach((el) => el.classList.add('hidden'));
+    toolCards.forEach((c) => c.classList.remove('active'));
+  }
+
+  async function openTool(name) {
+    if (activeTool === name) {
+      stopActiveTool();
+      return;
+    }
+    stopActiveTool();
+    activeTool = name;
+    toolPanel.classList.remove('hidden');
+    toolPanelTitle.textContent = TOOL_TITLES[name];
+    toolBodies[name].classList.remove('hidden');
+    toolCards.forEach((c) => c.classList.toggle('active', c.dataset.tool === name));
+
+    if (name === 'compass') startCompass();
+    else if (name === 'level') startLevel();
+    else if (name === 'polar') startPolarClock();
+
+    toolPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  toolCards.forEach((card) => {
+    card.addEventListener('click', () => openTool(card.dataset.tool));
+  });
+  toolPanelClose.addEventListener('click', stopActiveTool);
+
+  // ---- Compass ----
+  async function startCompass() {
+    const hint = document.getElementById('compassHint');
+    const dial = document.getElementById('compassDial');
+    const readout = document.getElementById('compassHeading');
+
+    if (typeof DeviceOrientationEvent === 'undefined') {
+      hint.textContent = 'Orientation sensors are not supported on this device.';
+      return;
+    }
+
+    const granted = await requestOrientationPermission();
+    if (!granted) {
+      hint.textContent = 'Sensor access was denied. Enable motion & orientation access in your browser settings.';
+      return;
+    }
+    hint.textContent = 'Hold the phone flat, screen up.';
+
+    orientationHandler = (e) => {
+      let heading = null;
+      if (typeof e.webkitCompassHeading === 'number') {
+        heading = e.webkitCompassHeading; // iOS: already true/magnetic heading, CW from N
+      } else if (e.alpha !== null) {
+        heading = 360 - e.alpha; // Android: alpha increases CCW from N
+      }
+      if (heading === null || isNaN(heading)) return;
+      heading = ((heading % 360) + 360) % 360;
+      dial.style.transform = `rotate(${-heading}deg)`;
+      readout.textContent = `${Math.round(heading)}° ${headingLabel(heading)}`;
+    };
+    window.addEventListener('deviceorientation', orientationHandler);
+  }
+
+  function headingLabel(deg) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    return dirs[Math.round(deg / 45) % 8];
+  }
+
+  // ---- Level ----
+  async function startLevel() {
+    const hint = document.getElementById('levelHint');
+    const bubble = document.getElementById('levelBubble');
+    const readout = document.getElementById('levelReadout');
+
+    if (typeof DeviceOrientationEvent === 'undefined') {
+      hint.textContent = 'Tilt sensors are not supported on this device.';
+      return;
+    }
+    const granted = await requestOrientationPermission();
+    if (!granted) {
+      hint.textContent = 'Sensor access was denied. Enable motion & orientation access in your browser settings.';
+      return;
+    }
+
+    const maxOffset = 90; // px bubble can travel from center
+    motionLevelHandler = (e) => {
+      const beta = e.beta || 0;   // front-back tilt, -180..180
+      const gamma = e.gamma || 0; // left-right tilt, -90..90
+
+      const clampedBeta = Math.max(-45, Math.min(45, beta));
+      const clampedGamma = Math.max(-45, Math.min(45, gamma));
+
+      const x = (clampedGamma / 45) * maxOffset;
+      const y = (clampedBeta / 45) * maxOffset;
+
+      bubble.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+
+      const isFlat = Math.abs(beta) < 1.5 && Math.abs(gamma) < 1.5;
+      bubble.classList.toggle('level-ok', isFlat);
+
+      readout.textContent = `${beta.toFixed(1)}° / ${gamma.toFixed(1)}°`;
+    };
+    window.addEventListener('deviceorientation', motionLevelHandler);
+  }
+
+  // ---- Polar Clock (hour-angle position of Polaris around NCP) ----
+  // Polaris (α UMi) approx J2000: RA = 2h 31.8m, Dec = +89.26°
+  const POLARIS_RA_HOURS = 2.5303;
+
+  function computeGMSTHours(date) {
+    // Standard low-precision GMST formula (hours)
+    const JD = date.getTime() / 86400000 + 2440587.5;
+    const T = (JD - 2451545.0) / 36525;
+    let gmst = 280.46061837 + 360.98564736629 * (JD - 2451545.0)
+      + 0.000387933 * T * T - (T * T * T) / 38710000;
+    gmst = ((gmst % 360) + 360) % 360;
+    return gmst / 15; // hours
+  }
+
+  function drawPolarClock() {
+    const svg = document.getElementById('polarClockSvg');
+    const readout = document.getElementById('polarReadout');
+    const lon = currentLon !== null ? currentLon : 0;
+
+    const gmstHours = computeGMSTHours(new Date());
+    const lstHours = ((gmstHours + lon / 15) % 24 + 24) % 24;
+    let hourAngle = lstHours - POLARIS_RA_HOURS; // hours
+    hourAngle = ((hourAngle % 24) + 24) % 24;
+    const angleDeg = hourAngle * 15; // 0..360, 0 = Polaris due "up" from pole at HA=0
+
+    // Convention: HA=0 -> Polaris at top (12 o'clock) as seen looking at the pole,
+    // increasing HA rotates clockwise.
+    const cx = 100, cy = 100, r = 82;
+    const rad = (angleDeg - 90) * Math.PI / 180;
+    const px = cx + r * Math.cos(rad);
+    const py = cy + r * Math.sin(rad);
+
+    let svgMarkup = `
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--hairline)" stroke-width="1"/>
+      <circle cx="${cx}" cy="${cy}" r="3" fill="var(--accent)"/>
+      <line x1="${cx}" y1="${cy}" x2="${px}" y2="${py}" stroke="var(--accent)" stroke-width="1.5"/>
+      <circle cx="${px}" cy="${py}" r="5" fill="var(--accent)" style="filter: drop-shadow(0 0 4px rgba(212,175,106,0.8));"/>
+    `;
+    ['0','6','12','18'].forEach((h) => {
+      const a = (Number(h) * 15 - 90) * Math.PI / 180;
+      const lx = cx + (r + 10) * Math.cos(a);
+      const ly = cy + (r + 10) * Math.sin(a);
+      svgMarkup += `<text x="${lx}" y="${ly}" fill="var(--text-muted)" font-size="9" font-family="var(--font-mono)" text-anchor="middle" dominant-baseline="middle">${h}h</text>`;
+    });
+    svg.innerHTML = svgMarkup;
+
+    readout.textContent = `HA ${hourAngle.toFixed(2)}h · LST ${lstHours.toFixed(2)}h`;
+  }
+
+  function startPolarClock() {
+    drawPolarClock();
+    polarTimer = setInterval(drawPolarClock, 15000);
   }
 
   start();

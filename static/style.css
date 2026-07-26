@@ -294,7 +294,6 @@ body {
 .now-line::after {
   content: '';
   position: absolute;
-  right: -3px;
   top: -3px;
   width: 8px; height: 8px;
   border-radius: 50%;
@@ -655,6 +654,177 @@ body {
 .breakdown-value {
   font-family: var(--font-mono);
   color: var(--accent);
+}
+
+/* ---------- Tools ---------- */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.tool-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 8px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.tool-card:active { background: rgba(212,175,106,0.06); }
+.tool-card.active {
+  border-color: var(--accent-dim);
+  background: var(--accent-soft);
+}
+.tool-icon { color: var(--accent); }
+.tool-name {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.tool-panel {
+  margin-top: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 18px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.tool-panel-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.tool-panel-header h3 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0;
+}
+.tool-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.tool-readout {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  color: var(--accent);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+/* Compass */
+.compass-face {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: radial-gradient(circle at 50% 40%, rgba(212,175,106,0.06), transparent 70%), var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.compass-dial {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  transition: transform 0.15s ease-out;
+}
+.compass-dial span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.compass-n { transform: translate(-50%, -96px); color: var(--accent); font-weight: 600; }
+.compass-e { transform: translate(78px, -6px); }
+.compass-s { transform: translate(-50%, 82px); }
+.compass-w { transform: translate(-96px, -6px); }
+.compass-needle {
+  position: absolute;
+  width: 2px;
+  height: 76px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -100%);
+  background: linear-gradient(to bottom, var(--accent), transparent);
+  box-shadow: 0 0 8px rgba(212,175,106,0.7);
+  pointer-events: none;
+}
+.compass-needle::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateX(-50%);
+  box-shadow: 0 0 8px rgba(212,175,106,0.9);
+}
+
+/* Level */
+.level-face {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+.level-crosshair {
+  position: absolute;
+  inset: 0;
+}
+.level-crosshair::before, .level-crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--hairline);
+}
+.level-crosshair::before { left: 0; right: 0; top: 50%; height: 1px; }
+.level-crosshair::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+.level-bubble {
+  position: absolute;
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1.5px solid var(--accent);
+  box-shadow: 0 0 14px rgba(212,175,106,0.5);
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 0.08s linear;
+}
+.level-bubble.level-ok {
+  border-color: #6fbf73;
+  box-shadow: 0 0 14px rgba(111,191,115,0.6);
+}
+
+/* Polar clock */
+.polar-face {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------- Bottom nav ---------- */
