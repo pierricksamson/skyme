@@ -13,14 +13,17 @@
   const ZOOM_MIN = 0.5;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
-  let zoomLevel = 1;
+  let zoomLevel = 0.5;
 
   let currentData = null;
   let nowLineTimer = null;
 
   const AGENDA_DAYS = 30;
-  const PREF_WINDOW_ENABLED_KEY = 'skyme_pref_window_enabled';
-  const PREF_MARGIN_AUTO_KEY = 'skyme_pref_margin_auto';
+  
+  // Nouveaux paramètres 
+  const PREF_MODE_KEY = 'skyme_pref_mode'; // 'fixed' ou 'margin'
+  const PREF_MARGIN_VAL_KEY = 'skyme_pref_margin_val'; // int (défaut: 30)
+
   const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   let currentLat = null;
   let currentLon = null;
@@ -33,14 +36,13 @@
   agendaLastDay.setDate(agendaLastDay.getDate() + AGENDA_DAYS - 1);
   let agendaViewMonth = new Date(today0.getFullYear(), today0.getMonth(), 1);
 
-  function isMarginAuto() {
-    // Auto by default (civil twilight), matching the previous default.
-    const stored = localStorage.getItem(PREF_MARGIN_AUTO_KEY);
-    return stored === null ? true : stored === 'true';
+  function getObsMode() {
+    return localStorage.getItem(PREF_MODE_KEY) || 'margin';
   }
 
-  function getMarginPref() {
-    return isMarginAuto() ? 'auto' : '30';
+  function getObsMargin() {
+    const stored = localStorage.getItem(PREF_MARGIN_VAL_KEY);
+    return stored !== null ? parseInt(stored, 10) : 30;
   }
 
   function fmtTime(iso) {
@@ -96,8 +98,26 @@
 
   async function fetchSky(lat, lon, elev, dateStr) {
     try {
-      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&margin=${getMarginPref()}`;
+      const mode = getObsMode();
+      const margin = getObsMargin();
+
+      // Construction des dates exactes dans le fuseau local si on est en mode 'fixed'
+      let dateToUse = new Date();
+      if (dateStr) {
+        const parts = dateStr.split('-');
+        dateToUse = new Date(parts[0], parts[1] - 1, parts[2]);
+      }
+      
+      let startFixed = new Date(dateToUse);
+      startFixed.setHours(20, 0, 0, 0); // 20:00 locale
+      let endFixed = new Date(dateToUse);
+      endFixed.setDate(endFixed.getDate() + 1); // Jour suivant
+      endFixed.setHours(6, 0, 0, 0); // 06:00 locale
+
+      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}`;
+      url += `&fixed_start=${startFixed.toISOString()}&fixed_end=${endFixed.toISOString()}`;
       if (dateStr) url += `&date=${dateStr}`;
+      
       const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -240,7 +260,6 @@
   document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoomLevel + ZOOM_STEP));
   document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoomLevel - ZOOM_STEP));
 
-  // vertical pinch-to-zoom (two-finger)
   let pinchStartDist = null;
   let pinchStartZoom = 1;
   const tlWrapEl_forPinch = () => document.getElementById('tlWrap');
@@ -361,7 +380,6 @@
     document.getElementById(`view-${name}`).classList.remove('hidden');
     document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
     if (name === 'timeline' && currentData) {
-      // re-measure lane width now that the view is visible again
       renderTimeline(currentData);
       positionNowLine(currentData);
     }
@@ -374,7 +392,6 @@
   refreshBtn.addEventListener('click', start);
   retryBtn.addEventListener('click', start);
 
-  // ---------- Agenda (calendar view) ----------
   function toDateStr(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -447,34 +464,45 @@
     fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
   }
 
-  // ---------- Settings: on/off toggles (localStorage) ----------
-  const prefWindowToggle = document.getElementById('prefWindowToggle');
-  const prefMarginToggle = document.getElementById('prefMarginToggle');
+  // ---------- Settings: On/off toggles (localStorage) ----------
+  const modeFixedRadio = document.getElementById('modeFixed');
+  const modeMarginRadio = document.getElementById('modeMargin');
+  const marginInput = document.getElementById('marginInput');
 
   function loadPreferences() {
-    prefWindowToggle.checked = localStorage.getItem(PREF_WINDOW_ENABLED_KEY) === 'true';
-    prefMarginToggle.checked = isMarginAuto();
+    const mode = getObsMode();
+    if (mode === 'fixed') {
+      modeFixedRadio.checked = true;
+      marginInput.disabled = true;
+    } else {
+      modeMarginRadio.checked = true;
+      marginInput.disabled = false;
+    }
+    marginInput.value = getObsMargin();
   }
 
-  function saveWindowPreference() {
-    localStorage.setItem(PREF_WINDOW_ENABLED_KEY, prefWindowToggle.checked ? 'true' : 'false');
-  }
+  function savePreferences() {
+    const mode = modeFixedRadio.checked ? 'fixed' : 'margin';
+    let margin = parseInt(marginInput.value, 10);
+    if (isNaN(margin) || margin < 0) margin = 0;
+    
+    localStorage.setItem(PREF_MODE_KEY, mode);
+    localStorage.setItem(PREF_MARGIN_VAL_KEY, margin.toString());
+    
+    marginInput.disabled = (mode === 'fixed');
 
-  function saveMarginPreference() {
-    localStorage.setItem(PREF_MARGIN_AUTO_KEY, prefMarginToggle.checked ? 'true' : 'false');
-    // The margin affects the observation window itself, so re-fetch the
-    // night currently shown (today's view or whichever agenda night is open).
     if (currentLat !== null && currentLon !== null) {
       const dateStr = currentData && currentData.requested_date ? currentData.requested_date : undefined;
       fetchSky(currentLat, currentLon, currentElev, dateStr);
     }
   }
 
-  prefWindowToggle.addEventListener('change', saveWindowPreference);
-  prefMarginToggle.addEventListener('change', saveMarginPreference);
+  modeFixedRadio.addEventListener('change', savePreferences);
+  modeMarginRadio.addEventListener('change', savePreferences);
+  marginInput.addEventListener('change', savePreferences);
   loadPreferences();
 
-  // ---------- Overview: library stats (full catalog, independent of tonight) ----------
+  // ---------- Overview: library stats ----------
   async function fetchCatalogStatsOnce() {
     if (catalogStats) return catalogStats;
     try {

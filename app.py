@@ -20,8 +20,6 @@ app = Flask(__name__)
 
 STEP_MINUTES = 4
 MIN_ALT = 0.0  # degrees, horizon cutoff
-TWILIGHT_ALT = -6.0  # degrees, civil twilight cutoff used by the "auto" margin mode
-DEFAULT_MARGIN_MIN = 30
 
 # Approximate mean apparent magnitudes (true planetary magnitude depends on
 # phase & sun-earth-planet distance, but fixed values keep the app fully
@@ -75,20 +73,6 @@ def find_night_window(location, now_utc, min_alt=MIN_ALT):
         sunset_t = t0
         sunrise_t = t0 + 10 * u.hour
     return sunset_t, sunrise_t
-
-
-def resolve_window_margin(margin_param):
-    """Turn the `margin` query param into either a fixed number of minutes
-    (manual mode) or the string "auto" (civil-twilight based margin)."""
-    if margin_param is None:
-        return DEFAULT_MARGIN_MIN
-    if margin_param.strip().lower() == "auto":
-        return "auto"
-    try:
-        minutes = int(margin_param)
-    except ValueError:
-        return DEFAULT_MARGIN_MIN
-    return max(0, min(minutes, 180))
 
 
 def _interp_time(t0, t1, v0, v1, target):
@@ -189,12 +173,13 @@ def index():
 def sky():
     try:
         lat = float(request.args["lat"])
-        lon = float(request.args["lon"])
-        elev = float(request.args.get("elev", 0) or 0)
+        lon = float(request.args["lon"])        
     except (KeyError, ValueError):
         return jsonify({"error": "lat/lon required"}), 400
 
     date_str = request.args.get("date")
+    elev = float(request.args.get("elev", 0) or 0)
+    
     if date_str:
         try:
             now_utc = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -205,16 +190,35 @@ def sky():
 
     location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
 
-    margin = resolve_window_margin(request.args.get("margin"))
-
+    # Calcul du vrai coucher/lever pour l'affichage
     sunset_t, sunrise_t = find_night_window(location, now_utc)
-    if margin == "auto":
-        # Civil-twilight based margin: the window naturally stretches to
-        # dusk/dawn instead of a fixed number of minutes past sunset/sunrise.
-        t_start, t_end = find_night_window(location, now_utc, min_alt=TWILIGHT_ALT)
+
+    mode = request.args.get("mode", "margin")
+    if mode == "fixed":
+        try:
+            # Client envoie l'heure exacte en ISO depuis son fuseau local
+            fixed_start_str = request.args.get("fixed_start").replace("Z", "+00:00")
+            fixed_end_str = request.args.get("fixed_end").replace("Z", "+00:00")
+            t_start = Time(datetime.fromisoformat(fixed_start_str))
+            t_end = Time(datetime.fromisoformat(fixed_end_str))
+        except (KeyError, TypeError, ValueError):
+            t_start = sunset_t
+            t_end = sunrise_t
     else:
+        # Mode Marge (Choix 2)
+        try:
+            margin = float(request.args.get("margin", 30))
+        except (TypeError, ValueError):
+            margin = 30
+            
         t_start = sunset_t - margin * u.minute
         t_end = sunrise_t + margin * u.minute
+        
+        # Sécurité : Si la marge est trop grande et chevauche le jour
+        if t_start >= t_end:
+            t_start = sunset_t
+            t_end = sunrise_t
+    
     t_list = build_time_array(t_start, t_end)
     frame_list = AltAz(obstime=t_list, location=location)
 
@@ -251,7 +255,7 @@ def sky():
 
     return jsonify({
         "requested_date": date_str,
-        "margin_mode": margin,
+        "mode": mode,
         "sunset": sunset_t.utc.isot + "Z",
         "sunrise": sunrise_t.utc.isot + "Z",
         "window_start": t_start.utc.isot + "Z",
