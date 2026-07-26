@@ -94,32 +94,75 @@
         <div id="legend" class="legend"></div>
         <div class="section-heading"><h2>Location</h2></div>
         <p id="locLine" class="loc-line">—</p>
+
+        <div class="section-heading"><h2>Library</h2></div>
+        <div class="stats-grid" id="libraryStats">
+          <div class="stat-cell">
+            <span class="stat-value" id="statTotal">—</span>
+            <span class="stat-label">Total objects</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-value" id="statStars">—</span>
+            <span class="stat-label">Stars</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-value" id="statPlanets">—</span>
+            <span class="stat-label">Planets</span>
+          </div>
+          <div class="stat-cell">
+            <span class="stat-value" id="statDeepSky">—</span>
+            <span class="stat-label">Deep-sky</span>
+          </div>
+        </div>
+        <div id="libraryBreakdown" class="library-breakdown"></div>
       </section>
 
-      <!-- ===== AGENDA VIEW ===== -->
+      <!-- ===== AGENDA VIEW (calendar) ===== -->
       <section id="view-agenda" class="view hidden">
         <div class="section-heading"><h2>Agenda</h2></div>
         <p class="agenda-intro">Tap a night to load its sky.</p>
-        <div id="agendaList" class="agenda-list"></div>
+        <div class="calendar">
+          <div class="calendar-nav">
+            <button id="agendaPrevMonth" class="cal-nav-btn" title="Previous month">‹</button>
+            <span id="agendaMonthLabel" class="cal-month-label">—</span>
+            <button id="agendaNextMonth" class="cal-nav-btn" title="Next month">›</button>
+          </div>
+          <div class="calendar-weekdays" id="agendaWeekdays"></div>
+          <div class="calendar-grid" id="agendaGrid"></div>
+        </div>
       </section>
 
       <!-- ===== SETTINGS VIEW ===== -->
       <section id="view-settings" class="view hidden">
         <div class="section-heading"><h2>Preferences</h2></div>
         <div class="settings-card">
-          <p class="settings-label">Preferred observation window</p>
-          <div class="time-range-picker">
-            <label class="time-field">
-              <span>From</span>
-              <input type="time" id="prefStart" min="00:00" max="23:59" step="60">
-            </label>
-            <span class="time-range-sep">–</span>
-            <label class="time-field">
-              <span>To</span>
-              <input type="time" id="prefEnd" min="00:00" max="23:59" step="60">
+          <div class="toggle-row">
+            <div class="toggle-text">
+              <p class="settings-label">Preferred observation window</p>
+              <p class="settings-hint">Restricts the default view to 20:00–06:00.</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="prefWindowToggle">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
             </label>
           </div>
-          <p class="settings-hint">Saved on this device.</p>
+        </div>
+
+        <div class="settings-card">
+          <div class="toggle-row">
+            <div class="toggle-text">
+              <p class="settings-label">Auto twilight margin</p>
+              <p class="settings-hint">
+                On: the window follows civil twilight (sun's position).
+                Off: a fixed 30-minute margin. Applies to tonight's view and
+                to every night in the Agenda.
+              </p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="prefMarginToggle">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
         </div>
       </section>
 

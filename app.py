@@ -20,6 +20,8 @@ app = Flask(__name__)
 
 STEP_MINUTES = 4
 MIN_ALT = 0.0  # degrees, horizon cutoff
+TWILIGHT_ALT = -6.0  # degrees, civil twilight cutoff used by the "auto" margin mode
+DEFAULT_MARGIN_MIN = 30
 
 # Approximate mean apparent magnitudes (true planetary magnitude depends on
 # phase & sun-earth-planet distance, but fixed values keep the app fully
@@ -50,9 +52,10 @@ def moon_magnitude(t, location):
     return round(-12.7 + 2.5 * np.log10(1 / illum), 2)
 
 
-def find_night_window(location, now_utc):
+def find_night_window(location, now_utc, min_alt=MIN_ALT):
     """Sample the sun's altitude across the next ~36h to find the coming
-    sunset and the following sunrise."""
+    moment it crosses below `min_alt` (sunset, or dusk) and the following
+    moment it crosses back above it (sunrise, or dawn)."""
     t0 = Time(now_utc)
     minutes = np.arange(0, 36 * 60, 5)
     times = t0 + minutes * u.minute
@@ -62,16 +65,30 @@ def find_night_window(location, now_utc):
     sunset_t = None
     sunrise_t = None
     for i in range(1, len(sun_alt)):
-        if sunset_t is None and sun_alt[i - 1] > 0 >= sun_alt[i]:
-            sunset_t = _interp_time(times[i - 1], times[i], sun_alt[i - 1], sun_alt[i], 0.0)
-        elif sunset_t is not None and sunrise_t is None and sun_alt[i - 1] < 0 <= sun_alt[i]:
-            sunrise_t = _interp_time(times[i - 1], times[i], sun_alt[i - 1], sun_alt[i], 0.0)
+        if sunset_t is None and sun_alt[i - 1] > min_alt >= sun_alt[i]:
+            sunset_t = _interp_time(times[i - 1], times[i], sun_alt[i - 1], sun_alt[i], min_alt)
+        elif sunset_t is not None and sunrise_t is None and sun_alt[i - 1] < min_alt <= sun_alt[i]:
+            sunrise_t = _interp_time(times[i - 1], times[i], sun_alt[i - 1], sun_alt[i], min_alt)
             break
 
     if sunset_t is None or sunrise_t is None:
         sunset_t = t0
         sunrise_t = t0 + 10 * u.hour
     return sunset_t, sunrise_t
+
+
+def resolve_window_margin(margin_param):
+    """Turn the `margin` query param into either a fixed number of minutes
+    (manual mode) or the string "auto" (civil-twilight based margin)."""
+    if margin_param is None:
+        return DEFAULT_MARGIN_MIN
+    if margin_param.strip().lower() == "auto":
+        return "auto"
+    try:
+        minutes = int(margin_param)
+    except ValueError:
+        return DEFAULT_MARGIN_MIN
+    return max(0, min(minutes, 180))
 
 
 def _interp_time(t0, t1, v0, v1, target):
@@ -188,9 +205,16 @@ def sky():
 
     location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
 
+    margin = resolve_window_margin(request.args.get("margin"))
+
     sunset_t, sunrise_t = find_night_window(location, now_utc)
-    t_start = sunset_t - 30 * u.minute
-    t_end = sunrise_t + 30 * u.minute
+    if margin == "auto":
+        # Civil-twilight based margin: the window naturally stretches to
+        # dusk/dawn instead of a fixed number of minutes past sunset/sunrise.
+        t_start, t_end = find_night_window(location, now_utc, min_alt=TWILIGHT_ALT)
+    else:
+        t_start = sunset_t - margin * u.minute
+        t_end = sunrise_t + margin * u.minute
     t_list = build_time_array(t_start, t_end)
     frame_list = AltAz(obstime=t_list, location=location)
 
@@ -227,12 +251,34 @@ def sky():
 
     return jsonify({
         "requested_date": date_str,
+        "margin_mode": margin,
         "sunset": sunset_t.utc.isot + "Z",
         "sunrise": sunrise_t.utc.isot + "Z",
         "window_start": t_start.utc.isot + "Z",
         "window_end": t_end.utc.isot + "Z",
         "lane_count": lane_count,
         "objects": objects_sorted,
+    })
+
+
+@app.route("/api/catalog/stats")
+def catalog_stats():
+    deep_sky_by_kind = {}
+    for _name, _ra, _dec, _mag, kind in DEEP_SKY:
+        deep_sky_by_kind[kind] = deep_sky_by_kind.get(kind, 0) + 1
+
+    counts = {
+        "moon": 1,
+        "planet": len(PLANET_MAG),
+        "star": len(STARS),
+        **deep_sky_by_kind,
+    }
+    total = sum(counts.values())
+
+    return jsonify({
+        "total": total,
+        "counts": counts,
+        "deep_sky_total": len(DEEP_SKY),
     })
 
 

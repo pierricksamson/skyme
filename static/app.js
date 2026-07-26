@@ -19,12 +19,29 @@
   let nowLineTimer = null;
 
   const AGENDA_DAYS = 30;
-  const PREF_START_KEY = 'skyme_pref_start';
-  const PREF_END_KEY = 'skyme_pref_end';
+  const PREF_WINDOW_ENABLED_KEY = 'skyme_pref_window_enabled';
+  const PREF_MARGIN_AUTO_KEY = 'skyme_pref_margin_auto';
+  const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   let currentLat = null;
   let currentLon = null;
   let currentElev = 0;
-  let agendaBuilt = false;
+  let catalogStats = null;
+
+  const today0 = new Date();
+  today0.setHours(0, 0, 0, 0);
+  const agendaLastDay = new Date(today0);
+  agendaLastDay.setDate(agendaLastDay.getDate() + AGENDA_DAYS - 1);
+  let agendaViewMonth = new Date(today0.getFullYear(), today0.getMonth(), 1);
+
+  function isMarginAuto() {
+    // Auto by default (civil twilight), matching the previous default.
+    const stored = localStorage.getItem(PREF_MARGIN_AUTO_KEY);
+    return stored === null ? true : stored === 'true';
+  }
+
+  function getMarginPref() {
+    return isMarginAuto() ? 'auto' : '30';
+  }
 
   function fmtTime(iso) {
     const d = new Date(iso);
@@ -79,7 +96,7 @@
 
   async function fetchSky(lat, lon, elev, dateStr) {
     try {
-      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}`;
+      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&margin=${getMarginPref()}`;
       if (dateStr) url += `&date=${dateStr}`;
       const res = await fetch(url);
       if (!res.ok) {
@@ -108,7 +125,8 @@
     renderTimeline(data);
     renderLegend(data);
     renderSchedule(data);
-    buildAgendaList();
+    renderAgendaCalendar();
+    renderLibraryStats();
 
     if (nowLineTimer) clearInterval(nowLineTimer);
     positionNowLine(data);
@@ -356,41 +374,68 @@
   refreshBtn.addEventListener('click', start);
   retryBtn.addEventListener('click', start);
 
-  // ---------- Agenda (next 30 days) ----------
-  function buildAgendaList() {
-    if (agendaBuilt) return;
-    agendaBuilt = true;
-
-    const list = document.getElementById('agendaList');
-    list.innerHTML = '';
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (let i = 0; i < AGENDA_DAYS; i++) {
-      const d = new Date(today);
-      d.setDate(d.getDate() + i);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      const dateStr = `${y}-${m}-${day}`;
-
-      const row = document.createElement('button');
-      row.type = 'button';
-      row.className = 'agenda-row';
-      const label = i === 0
-        ? 'Tonight'
-        : i === 1
-          ? 'Tomorrow night'
-          : d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
-      row.innerHTML = `
-        <span class="agenda-date">${label}</span>
-        <span class="agenda-arrow">→</span>
-      `;
-      row.addEventListener('click', () => openAgendaDay(dateStr, d));
-      list.appendChild(row);
-    }
+  // ---------- Agenda (calendar view) ----------
+  function toDateStr(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   }
+
+  function renderAgendaWeekdays() {
+    const weekdays = document.getElementById('agendaWeekdays');
+    if (weekdays.childElementCount) return;
+    weekdays.innerHTML = WEEKDAY_LABELS.map((w) => `<span>${w}</span>`).join('');
+  }
+
+  function renderAgendaCalendar() {
+    renderAgendaWeekdays();
+
+    const grid = document.getElementById('agendaGrid');
+    const label = document.getElementById('agendaMonthLabel');
+    grid.innerHTML = '';
+    label.textContent = agendaViewMonth.toLocaleDateString([], { month: 'long', year: 'numeric' });
+
+    const monthStart = new Date(agendaViewMonth);
+    const firstWeekday = monthStart.getDay();
+    const gridStart = new Date(monthStart);
+    gridStart.setDate(gridStart.getDate() - firstWeekday);
+
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(gridStart);
+      d.setDate(d.getDate() + i);
+      const dateStr = toDateStr(d);
+
+      const inMonth = d.getMonth() === monthStart.getMonth();
+      const inRange = d >= today0 && d <= agendaLastDay;
+      const isToday = d.getTime() === today0.getTime();
+
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cal-day';
+      if (!inMonth) cell.classList.add('cal-day-outside');
+      if (isToday) cell.classList.add('cal-day-today');
+      if (inRange) cell.classList.add('cal-day-selectable');
+      else cell.disabled = true;
+
+      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${inRange ? '<span class="cal-day-dot"></span>' : ''}`;
+      if (inRange) cell.addEventListener('click', () => openAgendaDay(dateStr, d));
+      grid.appendChild(cell);
+    }
+
+    document.getElementById('agendaPrevMonth').disabled =
+      agendaViewMonth.getFullYear() === today0.getFullYear() &&
+      agendaViewMonth.getMonth() === today0.getMonth();
+  }
+
+  document.getElementById('agendaPrevMonth').addEventListener('click', () => {
+    agendaViewMonth = new Date(agendaViewMonth.getFullYear(), agendaViewMonth.getMonth() - 1, 1);
+    renderAgendaCalendar();
+  });
+  document.getElementById('agendaNextMonth').addEventListener('click', () => {
+    agendaViewMonth = new Date(agendaViewMonth.getFullYear(), agendaViewMonth.getMonth() + 1, 1);
+    renderAgendaCalendar();
+  });
 
   function openAgendaDay(dateStr, dateObj) {
     if (currentLat === null || currentLon === null) return;
@@ -402,23 +447,66 @@
     fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
   }
 
-  // ---------- Settings: preferred observation time range (localStorage) ----------
-  const prefStartInput = document.getElementById('prefStart');
-  const prefEndInput = document.getElementById('prefEnd');
+  // ---------- Settings: on/off toggles (localStorage) ----------
+  const prefWindowToggle = document.getElementById('prefWindowToggle');
+  const prefMarginToggle = document.getElementById('prefMarginToggle');
 
   function loadPreferences() {
-    prefStartInput.value = localStorage.getItem(PREF_START_KEY) || '20:00';
-    prefEndInput.value = localStorage.getItem(PREF_END_KEY) || '06:00';
+    prefWindowToggle.checked = localStorage.getItem(PREF_WINDOW_ENABLED_KEY) === 'true';
+    prefMarginToggle.checked = isMarginAuto();
   }
 
-  function savePreferences() {
-    localStorage.setItem(PREF_START_KEY, prefStartInput.value || '00:00');
-    localStorage.setItem(PREF_END_KEY, prefEndInput.value || '23:59');
+  function saveWindowPreference() {
+    localStorage.setItem(PREF_WINDOW_ENABLED_KEY, prefWindowToggle.checked ? 'true' : 'false');
   }
 
-  prefStartInput.addEventListener('change', savePreferences);
-  prefEndInput.addEventListener('change', savePreferences);
+  function saveMarginPreference() {
+    localStorage.setItem(PREF_MARGIN_AUTO_KEY, prefMarginToggle.checked ? 'true' : 'false');
+    // The margin affects the observation window itself, so re-fetch the
+    // night currently shown (today's view or whichever agenda night is open).
+    if (currentLat !== null && currentLon !== null) {
+      const dateStr = currentData && currentData.requested_date ? currentData.requested_date : undefined;
+      fetchSky(currentLat, currentLon, currentElev, dateStr);
+    }
+  }
+
+  prefWindowToggle.addEventListener('change', saveWindowPreference);
+  prefMarginToggle.addEventListener('change', saveMarginPreference);
   loadPreferences();
+
+  // ---------- Overview: library stats (full catalog, independent of tonight) ----------
+  async function fetchCatalogStatsOnce() {
+    if (catalogStats) return catalogStats;
+    try {
+      const res = await fetch('/api/catalog/stats');
+      if (!res.ok) return null;
+      catalogStats = await res.json();
+      return catalogStats;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  async function renderLibraryStats() {
+    const stats = await fetchCatalogStatsOnce();
+    if (!stats) return;
+
+    document.getElementById('statTotal').textContent = stats.total;
+    document.getElementById('statStars').textContent = stats.counts.star || 0;
+    document.getElementById('statPlanets').textContent = stats.counts.planet || 0;
+    document.getElementById('statDeepSky').textContent = stats.deep_sky_total;
+
+    const breakdown = document.getElementById('libraryBreakdown');
+    const deepKinds = ['galaxy', 'nebula', 'cluster'];
+    breakdown.innerHTML = deepKinds
+      .filter((k) => stats.counts[k])
+      .map((k) => `
+        <div class="breakdown-row">
+          <span class="breakdown-label">${capitalize(k)}</span>
+          <span class="breakdown-value">${stats.counts[k]}</span>
+        </div>
+      `).join('');
+  }
 
   start();
 })();
