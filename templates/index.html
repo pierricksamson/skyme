@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050505">
+<title>Skyme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app">
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">✦</span>
+        <span class="brand-word">Skyme</span>
+      </div>
+      <button id="refreshBtn" class="icon-btn" title="Refresh">⟳</button>
+    </header>
+
+    <section id="statusPanel" class="status-panel">
+      <div class="spinner"></div>
+      <p id="statusText">Requesting GPS location…</p>
+    </section>
+
+    <section id="errorPanel" class="status-panel hidden">
+      <p id="errorText">Something went wrong.</p>
+      <button id="retryBtn" class="retry-btn">Try again</button>
+    </section>
+
+    <main id="mainContent" class="main-content hidden">
+
+      <!-- ===== TIMELINE VIEW (main screen — timeline only) ===== -->
+      <section id="view-timeline" class="view">
+        <div class="tl-meta">
+          <span id="tlDate" class="tl-date">—</span>
+          <div class="tl-meta-right">
+            <span id="nowTag" class="now-tag">now</span>
+            <div class="zoom-ctrl">
+              <button id="zoomOut" class="zoom-btn" title="Zoom out">–</button>
+              <span id="zoomPct" class="zoom-pct">100%</span>
+              <button id="zoomIn" class="zoom-btn" title="Zoom in">+</button>
+            </div>
+          </div>
+        </div>
+        <div id="tlWrap" class="tl-wrap">
+          <div id="tlHours" class="tl-hours"></div>
+          <div id="tlLanesScroll" class="tl-lanes-scroll">
+            <div id="tlLanes" class="tl-lanes"></div>
+          </div>
+          <div id="nowLine" class="now-line"></div>
+        </div>
+      </section>
+
+      <!-- ===== SCHEDULE VIEW ===== -->
+      <section id="view-schedule" class="view hidden">
+        <div class="section-heading"><h2>Observation Schedule</h2></div>
+        <div class="schedule-table">
+          <div class="schedule-row schedule-header">
+            <span>Object</span>
+            <span>Rise</span>
+            <span>Set</span>
+            <span>Duration</span>
+            <span>Alt / Mag</span>
+          </div>
+          <div id="scheduleBody"></div>
+        </div>
+      </section>
+
+      <!-- ===== OVERVIEW VIEW ===== -->
+      <section id="view-overview" class="view hidden">
+        <div class="section-heading"><h2>Tonight</h2></div>
+        <div class="window-summary">
+          <div class="summary-item">
+            <span class="summary-label">Sunset</span>
+            <span id="sunsetTime" class="summary-value">--:--</span>
+          </div>
+          <div class="summary-divider"></div>
+          <div class="summary-item">
+            <span class="summary-label">Sunrise</span>
+            <span id="sunriseTime" class="summary-value">--:--</span>
+          </div>
+          <div class="summary-divider"></div>
+          <div class="summary-item">
+            <span class="summary-label">Objects</span>
+            <span id="objectCount" class="summary-value">0</span>
+          </div>
+        </div>
+        <div class="section-heading"><h2>Categories</h2></div>
+        <div id="legend" class="legend"></div>
+        <div class="section-heading"><h2>Location</h2></div>
+        <p id="locLine" class="loc-line">—</p>
+      </section>
+
+    </main>
+
+    <nav id="bottomNav" class="bottom-nav hidden">
+      <button class="nav-btn active" data-view="timeline">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2v16M6 6h8M6 14h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>Timeline</span>
+      </button>
+      <button class="nav-btn" data-view="schedule">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <span>Schedule</span>
+      </button>
+      <button class="nav-btn" data-view="overview">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2.5l1.9 4.6 5 .4-3.8 3.2 1.2 4.9-4.3-2.7-4.3 2.7 1.2-4.9-3.8-3.2 5-.4z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        <span>Overview</span>
+      </button>
+    </nav>
+
+    <div id="infoOverlay" class="info-overlay hidden">
+      <div class="info-sheet">
+        <div class="info-sheet-handle"></div>
+        <div class="info-header">
+          <span id="infoDot" class="info-dot"></span>
+          <div>
+            <h3 id="infoName">—</h3>
+            <span id="infoCategory" class="info-category">—</span>
+          </div>
+          <button id="infoClose" class="info-close">✕</button>
+        </div>
+        <div class="info-grid">
+          <div class="info-cell">
+            <span class="info-label">Rise</span>
+            <span id="infoRise" class="info-value">--:--</span>
+          </div>
+          <div class="info-cell">
+            <span class="info-label">Set</span>
+            <span id="infoSet" class="info-value">--:--</span>
+          </div>
+          <div class="info-cell">
+            <span class="info-label">Duration</span>
+            <span id="infoDuration" class="info-value">—</span>
+          </div>
+          <div class="info-cell">
+            <span class="info-label">Peak altitude</span>
+            <span id="infoAlt" class="info-value">—</span>
+          </div>
+          <div class="info-cell info-cell-wide">
+            <span class="info-label">Magnitude</span>
+            <span id="infoMag" class="info-value">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
