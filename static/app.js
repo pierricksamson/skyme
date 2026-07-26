@@ -439,8 +439,9 @@
       const topPx = ((rise - start) / 60000) * pxPerMin;
       const heightPx = Math.max(((set - rise) / 60000) * pxPerMin, 22);
 
+      const fav = isFavorite(o.name);
       const block = document.createElement('div');
-      block.className = 'block' + (narrow ? ' block-narrow' : '');
+      block.className = 'block' + (narrow ? ' block-narrow' : '') + (fav ? ' block-favorite' : '');
       block.style.top = `${topPx}px`;
       block.style.height = `${heightPx}px`;
       block.style.left = `${o.lane * laneWidth + 2}px`;
@@ -449,7 +450,8 @@
 
       const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '';
       const subLine = narrow ? '' : `<span class="b-sub">${o.peak_altitude}° ${magStr}</span>`;
-      block.innerHTML = `<span class="b-name">${o.name}</span>${subLine}`;
+      const favBadge = fav ? `<span class="b-fav">★</span>` : '';
+      block.innerHTML = `${favBadge}<span class="b-name">${o.name}</span>${subLine}`;
       block.title = `${o.name} — ${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}, alt ${o.peak_altitude}°${magStr ? ', ' + magStr : ''}`;
       block.addEventListener('click', () => openInfo(o));
 
@@ -643,6 +645,7 @@
     document.getElementById('infoDot').style.color = color;
     document.getElementById('infoName').textContent = o.name;
     document.getElementById('infoCategory').textContent = CATEGORY_LABEL[o.category] || capitalize(o.category);
+    updateInfoFavBtn();
 
     const hasWindow = !!(o.rise_iso && o.set_iso);
     document.getElementById('infoRise').textContent = hasWindow ? fmtTime(o.rise_iso) : '--:--';
@@ -672,6 +675,22 @@
     if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
     infoObj = null;
   }
+
+  function updateInfoFavBtn() {
+    const btn = document.getElementById('infoFavBtn');
+    if (!btn || !infoObj) return;
+    const fav = isFavorite(infoObj.name);
+    btn.classList.toggle('active', fav);
+    btn.title = fav ? 'Retirer des favoris' : 'Ajouter aux favoris';
+    const icon = btn.querySelector('i');
+    if (icon) icon.className = fav ? 'bx bxs-star' : 'bx bx-star';
+  }
+
+  document.getElementById('infoFavBtn').addEventListener('click', async () => {
+    if (!infoObj) return;
+    await toggleFavorite(infoObj.name);
+    updateInfoFavBtn();
+  });
 
   document.getElementById('infoClose').addEventListener('click', closeInfo);
   document.getElementById('infoOverlay').addEventListener('click', (e) => {
@@ -955,6 +974,49 @@
     closeMapPicker();
   });
 
+  // ---------- Favoris (persistés côté serveur) ----------
+  let favoritesSet = new Set();
+
+  async function loadFavorites() {
+    try {
+      const res = await fetch('/api/favorites');
+      if (res.ok) {
+        const data = await res.json();
+        favoritesSet = new Set(data.favorites || []);
+      }
+    } catch (e) {
+      // hors-ligne / erreur réseau : on garde l'état courant (vide au 1er chargement)
+    }
+  }
+
+  function isFavorite(name) {
+    return favoritesSet.has(name);
+  }
+
+  async function toggleFavorite(name) {
+    // Mise à jour optimiste locale, puis confirmation serveur.
+    const wasFav = favoritesSet.has(name);
+    if (wasFav) favoritesSet.delete(name); else favoritesSet.add(name);
+    renderLibraryList();
+    if (currentData) renderTimeline(currentData);
+
+    try {
+      const res = await fetch('/api/favorites/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.favorite) favoritesSet.add(name); else favoritesSet.delete(name);
+      }
+    } catch (e) {
+      // best effort : l'état local reste appliqué pour cette session
+    }
+    renderLibraryList();
+    if (currentData) renderTimeline(currentData);
+  }
+
   // ---------- Overview: library stats ----------
   async function fetchCatalogStatsOnce() {
     if (catalogStats) return catalogStats;
@@ -1041,7 +1103,11 @@
 
     const term = normalizeSearch(libSearchTerm.trim());
     const filtered = catalogList.filter((o) => {
-      if (libActiveCategory !== 'all' && o.category !== libActiveCategory) return false;
+      if (libActiveCategory === 'favorites') {
+        if (!isFavorite(o.name)) return false;
+      } else if (libActiveCategory !== 'all' && o.category !== libActiveCategory) {
+        return false;
+      }
       if (term && !normalizeSearch(o.name).includes(term)) return false;
       return true;
     });
@@ -1049,7 +1115,9 @@
     countEl.textContent = `${filtered.length} objet${filtered.length > 1 ? 's' : ''}`;
 
     if (filtered.length === 0) {
-      listEl.innerHTML = '<div class="lib-empty">Aucun objet ne correspond.</div>';
+      listEl.innerHTML = libActiveCategory === 'favorites'
+        ? '<div class="lib-empty">Aucun favori pour l\u2019instant. Touche l\u2019étoile d\u2019un objet pour l\u2019ajouter.</div>'
+        : '<div class="lib-empty">Aucun objet ne correspond.</div>';
       return;
     }
 
@@ -1057,6 +1125,7 @@
       const color = CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
       const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
       const nameAttr = o.name.replace(/"/g, '&quot;');
+      const fav = isFavorite(o.name);
       return `
         <div class="lib-row lib-row-clickable" data-name="${nameAttr}">
           <span class="lib-row-dot" style="background:${color}"></span>
@@ -1065,6 +1134,9 @@
             <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
           </span>
           <span class="lib-row-mag">${magStr}</span>
+          <button type="button" class="lib-fav-btn${fav ? ' active' : ''}" data-name="${nameAttr}" title="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">
+            <i class='bx ${fav ? 'bxs-star' : 'bx-star'}'></i>
+          </button>
         </div>
       `;
     }).join('');
@@ -1094,6 +1166,12 @@
   const libListEl = document.getElementById('libList');
   if (libListEl) {
     libListEl.addEventListener('click', (e) => {
+      const favBtn = e.target.closest('.lib-fav-btn');
+      if (favBtn && favBtn.dataset.name) {
+        e.stopPropagation();
+        toggleFavorite(favBtn.dataset.name);
+        return;
+      }
       const row = e.target.closest('.lib-row');
       if (!row || !row.dataset.name) return;
       const catalogItem = catalogList && catalogList.find((o) => o.name === row.dataset.name);
@@ -1460,6 +1538,7 @@
 
   async function initApp() {
     await loadSettingsFromServer();
+    await loadFavorites();
     loadPreferences();
     loadLocationPreferences();
     resolveLocation();

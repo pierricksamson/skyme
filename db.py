@@ -79,6 +79,14 @@ def init_db():
                 red_filter INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS favorites (
+                user_id INTEGER NOT NULL,
+                object_name TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, object_name),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
             """
         )
         conn.commit()
@@ -213,3 +221,51 @@ def update_settings(user_id, updates: dict):
         conn.commit()
     finally:
         conn.close()
+
+
+# ---------- Favoris (objets du catalogue marqués par l'utilisateur) ----------
+
+def get_favorites(user_id):
+    """Retourne la liste des noms d'objets favoris de l'utilisateur."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT object_name FROM favorites WHERE user_id = ?", (user_id,)
+        ).fetchall()
+        return [row["object_name"] for row in rows]
+    finally:
+        conn.close()
+
+
+def add_favorite(user_id, object_name):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO favorites (user_id, object_name, created_at) VALUES (?, ?, ?)",
+            (user_id, object_name, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def remove_favorite(user_id, object_name):
+    conn = get_connection()
+    try:
+        conn.execute(
+            "DELETE FROM favorites WHERE user_id = ? AND object_name = ?",
+            (user_id, object_name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def toggle_favorite(user_id, object_name):
+    """Bascule l'état favori d'un objet et retourne le nouvel état (bool)."""
+    current = set(get_favorites(user_id))
+    if object_name in current:
+        remove_favorite(user_id, object_name)
+        return False
+    add_favorite(user_id, object_name)
+    return True

@@ -20,6 +20,7 @@ from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
 from db import (
     init_db, verify_user, create_session, get_user_by_session,
     delete_session, get_settings, update_settings,
+    get_favorites, toggle_favorite,
 )
 
 app = Flask(__name__)
@@ -132,7 +133,8 @@ def find_visibility_window(alt_deg, min_alt=10.0):
 
 
 def compute_object(coord, name, category, fixed_mag, t_start, t_end,
-                    t_list, frame_list, location, min_alt=10.0, is_moon=False):
+                    t_list, frame_list, location, min_alt=10.0, is_moon=False,
+                    is_favorite=False):
     altaz = coord.transform_to(frame_list)
     alt_deg = altaz.alt.deg
 
@@ -167,6 +169,7 @@ def compute_object(coord, name, category, fixed_mag, t_start, t_end,
         "magnitude": round(mag, 2) if mag is not None else None,
         "touches_start": bool(touches_start),
         "touches_end": bool(touches_end),
+        "favorite": bool(is_favorite),
     }
 
 
@@ -302,32 +305,38 @@ def sky():
     t_list = build_time_array(t_start, t_end)
     frame_list = AltAz(obstime=t_list, location=location)
 
+    favorites = set(get_favorites(request.user["id"]))
+
     objects = []
 
     moon_coord = get_body("moon", t_list, location)
     obj = compute_object(moon_coord, "Moon", "moon", None, t_start, t_end,
-                          t_list, frame_list, location, is_moon=True, min_alt=min_alt)
+                          t_list, frame_list, location, is_moon=True, min_alt=min_alt,
+                          is_favorite=("Moon" in favorites))
     if obj:
         objects.append(obj)
 
     for pname, body_key in PLANET_BODY_NAME.items():
         coord = get_body(body_key, t_list, location)
         obj = compute_object(coord, pname, "planet", PLANET_MAG[pname], t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt)
+                              t_list, frame_list, location, min_alt=min_alt,
+                              is_favorite=(pname in favorites))
         if obj:
             objects.append(obj)
 
     for name, ra, dec, mag in STARS:
         coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         obj = compute_object(coord, name, "star", mag, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt)
+                              t_list, frame_list, location, min_alt=min_alt,
+                              is_favorite=(name in favorites))
         if obj:
             objects.append(obj)
 
     for name, ra, dec, mag, kind in DEEP_SKY:
         coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         obj = compute_object(coord, name, kind, mag, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt)
+                              t_list, frame_list, location, min_alt=min_alt,
+                              is_favorite=(name in favorites))
         if obj:
             objects.append(obj)
 
@@ -348,6 +357,8 @@ def sky():
 @app.route("/api/catalog/list")
 @login_required
 def catalog_list():
+    favorites = set(get_favorites(request.user["id"]))
+
     items = [{
         "name": "Moon",
         "category": "moon",
@@ -383,8 +394,28 @@ def catalog_list():
             "dec": round(dec, 4),
         })
 
+    for item in items:
+        item["favorite"] = item["name"] in favorites
+
     items.sort(key=lambda o: o["name"])
     return jsonify({"items": items})
+
+
+@app.route("/api/favorites", methods=["GET"])
+@login_required
+def favorites_list():
+    return jsonify({"favorites": get_favorites(request.user["id"])})
+
+
+@app.route("/api/favorites/toggle", methods=["POST"])
+@login_required
+def favorites_toggle():
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    is_favorite = toggle_favorite(request.user["id"], name)
+    return jsonify({"name": name, "favorite": is_favorite})
 
 
 @app.route("/api/catalog/stats")

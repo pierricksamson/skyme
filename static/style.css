@@ -388,6 +388,39 @@ body.red-filter::after {
   text-orientation: mixed;
   white-space: nowrap;
 }
+
+/* Objets favoris : hachures diagonales + petite étoile sur le bloc */
+.block-favorite::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(5,5,5,0.22) 0px,
+    rgba(5,5,5,0.22) 4px,
+    transparent 4px,
+    transparent 9px
+  );
+  border-radius: inherit;
+  pointer-events: none;
+}
+.block-favorite {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.45), inset 0 0 0 1.5px rgba(212,175,106,0.65);
+}
+.block .b-fav {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9px;
+  line-height: 1;
+  color: rgba(5,5,5,0.65);
+  z-index: 1;
+}
+.block-narrow .b-fav {
+  top: 4px;
+  right: 50%;
+  transform: translateX(50%);
+}
 .now-line {
   position: absolute;
   left: 0;
@@ -597,6 +630,28 @@ body.red-filter::after {
 }
 .lib-row-clickable:active {
   background: rgba(212,175,106,0.06);
+}
+.lib-fav-btn {
+  flex: none;
+  width: 30px; height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 17px;
+  border-radius: 50%;
+}
+.lib-fav-btn:active { background: rgba(212,175,106,0.1); }
+.lib-fav-btn.active {
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(212,175,106,0.6);
+}
+.lib-chip-fav.active {
+  color: #10100e;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .info-countdown {
   font-size: 34px;
@@ -1208,6 +1263,10 @@ body.red-filter::after {
   gap: 12px;
   margin-bottom: 18px;
 }
+.info-header > div {
+  flex: 1;
+  min-width: 0;
+}
 .info-dot {
   width: 14px; height: 14px;
   border-radius: 50%;
@@ -1228,8 +1287,23 @@ body.red-filter::after {
   text-transform: uppercase;
   color: var(--text-muted);
 }
+.info-fav-btn {
+  flex: none;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.info-fav-btn:active { background: rgba(212,175,106,0.1); }
+.info-fav-btn.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  text-shadow: 0 0 8px rgba(212,175,106,0.6);
+}
 .info-close {
-  margin-left: auto;
   width: 30px; height: 30px;
   border-radius: 50%;
   border: 1px solid var(--border);

@@ -124,6 +124,7 @@
         </div>
         <div id="libFilterChips" class="lib-filter-chips">
           <button type="button" class="lib-chip active" data-cat="all">Tout</button>
+          <button type="button" class="lib-chip lib-chip-fav" data-cat="favorites">★ Favoris</button>
           <button type="button" class="lib-chip" data-cat="moon">Lune</button>
           <button type="button" class="lib-chip" data-cat="planet">Planètes</button>
           <button type="button" class="lib-chip" data-cat="star">Étoiles</button>
@@ -395,6 +396,9 @@
             <h3 id="infoName">—</h3>
             <span id="infoCategory" class="info-category">—</span>
           </div>
+          <button id="infoFavBtn" class="info-fav-btn" title="Ajouter aux favoris">
+            <i class='bx bx-star'></i>
+          </button>
           <button id="infoClose" class="info-close">✕</button>
         </div>
         <div class="info-cell info-cell-wide" id="infoCountdownCell">
