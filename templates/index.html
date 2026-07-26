@@ -275,18 +275,18 @@
     type="button"
     id="redFilterBtn"
     value="Activer"
-    style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none;"
-    onclick="
-        document.body.classList.toggle('red-filter');
-
-        const enabled = document.body.classList.contains('red-filter');
-        localStorage.setItem('red-filter', enabled);
-
-        this.value = enabled ? 'Désactiver' : 'Activer';
-    ">             <span style="font-size: 14px; color: #aaa;">Activer/Désactiver le mode nocturne</span>
+    style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none;">             <span style="font-size: 14px; color: #aaa;">Activer/Désactiver le mode nocturne</span>
             </label>
           </div>
           
+        </div>
+
+        <div class="settings-card" style="display: flex; flex-direction: column; gap: 20px;">
+          <span style="font-weight: 900; font-size: 22px; font-family: var(--font-display);">Compte</span>
+          <div class="account-row">
+            <span style="font-size: 14px; color: #aaa; font-family: var(--font-mono);">{{ username }}</span>
+            <a href="{{ url_for('logout') }}" class="logout-link">Déconnexion</a>
+          </div>
         </div>
 
       </section>
@@ -359,18 +359,5 @@
   </div>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
-  <script>
-document.addEventListener("DOMContentLoaded", () => {
-    const enabled = localStorage.getItem("red-filter") === "true";
-
-    if (enabled) {
-        document.body.classList.add("red-filter");
-    }
-
-    document.getElementById("redFilterBtn").value = enabled
-        ? "Désactiver"
-        : "Activer";
-});
-</script>
 </body>
 </html>

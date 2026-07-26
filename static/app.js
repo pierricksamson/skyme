@@ -13,28 +13,67 @@
   const ZOOM_MIN = 0.5;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
-  const ZOOM_MODE_KEY = 'skyme_zoom_mode';   // 'auto' ou 'manual'
-  const ZOOM_VALUE_KEY = 'skyme_zoom_value'; // valeur numérique, utilisée seulement si mode = 'manual'
 
-  let zoomMode = localStorage.getItem(ZOOM_MODE_KEY) === 'manual' ? 'manual' : 'auto';
+  // Tous les réglages persistants (zoom, plage horaire, altitude min,
+  // mode nocturne...) vivent désormais côté serveur (SQLite), rien n'est
+  // stocké dans localStorage. settingsCache est rempli par
+  // loadSettingsFromServer() avant toute utilisation.
+  let settingsCache = {
+    zoom_mode: 'auto',
+    zoom_value: 1,
+    pref_mode: 'margin',
+    pref_margin: 30,
+    pref_fixed_start: '20:00',
+    pref_fixed_end: '06:00',
+    pref_min_alt: 10,
+    red_filter: false,
+  };
+
+  let zoomMode = 'auto';
   let zoomLevel = 1; // valeur réelle courante, recalculée si zoomMode === 'auto'
-
-  if (zoomMode === 'manual') {
-    const stored = parseFloat(localStorage.getItem(ZOOM_VALUE_KEY));
-    zoomLevel = isNaN(stored) ? 1 : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, stored));
-  }
 
   let currentData = null;
   let nowLineTimer = null;
 
   const AGENDA_DAYS = 30;
-  
-  // Nouveaux paramètres 
-  const PREF_MODE_KEY = 'skyme_pref_mode'; // 'fixed' ou 'margin'
-  const PREF_MARGIN_VAL_KEY = 'skyme_pref_margin_val'; // int (défaut: 30)
-  const PREF_FIXED_START_KEY = 'skyme_pref_fixed_start'; // NOUVEAU
-  const PREF_FIXED_END_KEY = 'skyme_pref_fixed_end';     // NOUVEAU
-  const PREF_MIN_ALT_KEY = 'skyme_pref_min_alt';
+
+  async function loadSettingsFromServer() {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        settingsCache = { ...settingsCache, ...data };
+      }
+    } catch (e) {
+      // hors-ligne / erreur réseau : on garde les valeurs par défaut
+    }
+
+    zoomMode = settingsCache.zoom_mode === 'manual' ? 'manual' : 'auto';
+    zoomLevel = zoomMode === 'manual'
+      ? Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, parseFloat(settingsCache.zoom_value) || 1))
+      : 1;
+
+    applyRedFilter(!!settingsCache.red_filter);
+  }
+
+  async function saveSettings(updates) {
+    settingsCache = { ...settingsCache, ...updates };
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (e) {
+      // best effort : la valeur reste appliquée localement pour cette session
+    }
+  }
+
+  function applyRedFilter(enabled) {
+    document.body.classList.toggle('red-filter', enabled);
+    const btn = document.getElementById('redFilterBtn');
+    if (btn) btn.value = enabled ? 'Désactiver' : 'Activer';
+  }
 
   const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   let currentLat = null;
@@ -49,25 +88,25 @@
   let agendaViewMonth = new Date(today0.getFullYear(), today0.getMonth(), 1);
 
   function getObsMode() {
-    return localStorage.getItem(PREF_MODE_KEY) || 'margin';
+    return settingsCache.pref_mode || 'margin';
   }
 
   function getObsMargin() {
-    const stored = localStorage.getItem(PREF_MARGIN_VAL_KEY);
-    return stored !== null ? parseInt(stored, 10) : 30;
+    const stored = settingsCache.pref_margin;
+    return stored !== null && stored !== undefined ? parseInt(stored, 10) : 30;
   }
 
   function getFixedStart() {
-    return localStorage.getItem(PREF_FIXED_START_KEY) || '20:00';
+    return settingsCache.pref_fixed_start || '20:00';
   }
 
   function getFixedEnd() {
-    return localStorage.getItem(PREF_FIXED_END_KEY) || '06:00';
+    return settingsCache.pref_fixed_end || '06:00';
   }
 
   function getMinAlt() {
-    const stored = localStorage.getItem(PREF_MIN_ALT_KEY);
-    return stored !== null ? parseFloat(stored) : 10;
+    const stored = settingsCache.pref_min_alt;
+    return stored !== null && stored !== undefined ? parseFloat(stored) : 10;
   }
 
   function fmtTime(iso) {
@@ -323,8 +362,7 @@
     zoomMode = 'manual';
     const anchor = currentTopAnchorMs(currentData);
     zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
-    localStorage.setItem(ZOOM_MODE_KEY, 'manual');
-    localStorage.setItem(ZOOM_VALUE_KEY, String(zoomLevel));
+    saveSettings({ zoom_mode: 'manual', zoom_value: zoomLevel });
     renderTimeline(currentData); // le scroll est réappliqué nous-mêmes ci-dessous
     positionNowLine(currentData);
     positionSunLines(currentData);
@@ -340,8 +378,7 @@
   function resetZoomToFit() {
     if (!currentData) return;
     zoomMode = 'auto';
-    localStorage.setItem(ZOOM_MODE_KEY, 'auto');
-    localStorage.removeItem(ZOOM_VALUE_KEY); // on ne stocke jamais la valeur calculée de l'auto
+    saveSettings({ zoom_mode: 'auto' }); // on ne stocke jamais la valeur calculée de l'auto
     renderTimeline(currentData); // renderTimeline recalcule zoomLevel car zoomMode === 'auto'
     positionNowLine(currentData);
     positionSunLines(currentData);
@@ -587,13 +624,14 @@
     fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
   }
 
-  // ---------- Settings: On/off toggles (localStorage) ----------
+  // ---------- Settings: On/off toggles (persistés en base côté serveur) ----------
   const modeFixedRadio = document.getElementById('modeFixed');
   const modeMarginRadio = document.getElementById('modeMargin');
   const marginInput = document.getElementById('marginInput');
   const fixedStartInput = document.getElementById('fixedStartInput');
   const fixedEndInput = document.getElementById('fixedEndInput');
   const minAltInput = document.querySelector('input[name="elev"]'); // NOUVEAU
+  const redFilterBtn = document.getElementById('redFilterBtn');
 
   function loadPreferences() {
     const mode = getObsMode();
@@ -625,12 +663,14 @@
     // Si l'utilisateur efface tout, on fallback sur les valeurs par défaut
     const startVal = fixedStartInput.value || '20:00';
     let endVal = fixedEndInput.value || '06:00';
-    
-    localStorage.setItem(PREF_MODE_KEY, mode);
-    localStorage.setItem(PREF_MARGIN_VAL_KEY, margin.toString());
-    localStorage.setItem(PREF_FIXED_START_KEY, startVal);
-    localStorage.setItem(PREF_FIXED_END_KEY, endVal);
-    
+
+    const updates = {
+      pref_mode: mode,
+      pref_margin: margin,
+      pref_fixed_start: startVal,
+      pref_fixed_end: endVal,
+    };
+
     marginInput.disabled = (mode === 'fixed');
     fixedStartInput.disabled = (mode !== 'fixed');
     fixedEndInput.disabled = (mode !== 'fixed');
@@ -639,8 +679,10 @@
       let minAltVal = parseFloat(minAltInput.value);
       if (isNaN(minAltVal) || minAltVal < 0) minAltVal = 0;
       if (minAltVal > 90) minAltVal = 90;
-      localStorage.setItem(PREF_MIN_ALT_KEY, minAltVal.toString());
+      updates.pref_min_alt = minAltVal;
     }
+
+    saveSettings(updates);
 
     if (currentLat !== null && currentLon !== null) {
       const dateStr = currentData && currentData.requested_date ? currentData.requested_date : undefined;
@@ -654,9 +696,14 @@
   fixedStartInput.addEventListener('change', savePreferences);
   fixedEndInput.addEventListener('change', savePreferences);
   minAltInput.addEventListener('change', savePreferences);
-  
 
-  loadPreferences();
+  if (redFilterBtn) {
+    redFilterBtn.addEventListener('click', () => {
+      const enabled = !document.body.classList.contains('red-filter');
+      applyRedFilter(enabled);
+      saveSettings({ red_filter: enabled });
+    });
+  }
 
   // ---------- Overview: library stats ----------
   async function fetchCatalogStatsOnce() {
@@ -1045,5 +1092,10 @@
     polarTimer = setInterval(drawPolarClock, 15000);
   }
 
-  start();
+  async function initApp() {
+    await loadSettingsFromServer();
+    loadPreferences();
+    start();
+  }
+  initApp();
 })();

@@ -2,3 +2,4 @@ __pycache__
 env
 *patch
 ssl
+skyme.db

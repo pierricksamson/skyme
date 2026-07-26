@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050505">
+<title>Skyme — Connexion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="brand" style="justify-content:center; margin-bottom: 8px;">
+        <span class="brand-mark">✦</span>
+        <span class="brand-word">Skyme</span>
+      </div>
+      <p class="login-sub">Connexion à votre compte</p>
+
+      {% if error %}
+      <div class="login-error">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" class="login-form" autocomplete="off">
+        <label class="login-label" for="username">Identifiant</label>
+        <input
+          type="text"
+          id="username"
+          name="username"
+          placeholder="user12345678"
+          pattern="user[0-9]{8}"
+          maxlength="12"
+          autocomplete="off"
+          required
+          class="login-input">
+
+        <label class="login-label" for="passkey">Passkey</label>
+        <input
+          type="password"
+          id="passkey"
+          name="passkey"
+          placeholder="········"
+          inputmode="numeric"
+          pattern="[0-9]{8}"
+          maxlength="8"
+          autocomplete="off"
+          required
+          class="login-input">
+
+        <button type="submit" class="login-btn">Se connecter</button>
+      </form>
+
+      <p class="login-hint">Aucune inscription possible. Les comptes sont créés par l'administrateur.</p>
+    </div>
+  </div>
+</body>
+</html>

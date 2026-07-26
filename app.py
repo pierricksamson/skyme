@@ -1,5 +1,7 @@
 import warnings
-from flask import Flask, render_template, request, jsonify
+from functools import wraps
+
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from datetime import datetime, timezone
 import numpy as np
 
@@ -15,8 +17,32 @@ from astropy.coordinates import (
 import astropy.units as u
 
 from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
+from db import (
+    init_db, verify_user, create_session, get_user_by_session,
+    delete_session, get_settings, update_settings,
+)
 
 app = Flask(__name__)
+init_db()
+
+# Cookie de session : pas d'expiration fonctionnelle (10 ans ~ "à vie").
+SESSION_COOKIE_NAME = "skyme_session"
+SESSION_MAX_AGE = 60 * 60 * 24 * 365 * 10
+
+
+def login_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        token = request.cookies.get(SESSION_COOKIE_NAME)
+        user = get_user_by_session(token)
+        if not user:
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "authentication required"}), 401
+            return redirect(url_for("login", next=request.path))
+        request.user = user
+        return view(*args, **kwargs)
+    return wrapped
+
 
 STEP_MINUTES = 4
 
@@ -164,11 +190,61 @@ def assign_lanes(objects):
 
 
 @app.route("/")
+@login_required
 def index():
-    return render_template("index.html")
+    return render_template("index.html", username=request.user["username"])
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if get_user_by_session(token):
+        return redirect(url_for("index"))
+
+    error = None
+    if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        passkey = (request.form.get("passkey") or "").strip()
+        user_id = verify_user(username, passkey)
+        if user_id is None:
+            error = "Identifiant ou passkey invalide."
+        else:
+            session_token = create_session(user_id)
+            resp = redirect(url_for("index"))
+            resp.set_cookie(
+                SESSION_COOKIE_NAME,
+                session_token,
+                max_age=SESSION_MAX_AGE,
+                httponly=True,
+                samesite="Lax",
+                secure=request.is_secure,
+            )
+            return resp
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+def logout():
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token:
+        delete_session(token)
+    resp = redirect(url_for("login"))
+    resp.delete_cookie(SESSION_COOKIE_NAME)
+    return resp
+
+
+@app.route("/api/settings", methods=["GET", "POST"])
+@login_required
+def settings_api():
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        update_settings(request.user["id"], payload)
+    return jsonify(get_settings(request.user["id"]))
 
 
 @app.route("/api/sky")
+@login_required
 def sky():
     try:
         lat = float(request.args["lat"])
@@ -270,6 +346,7 @@ def sky():
 
 
 @app.route("/api/catalog/stats")
+@login_required
 def catalog_stats():
     deep_sky_by_kind = {}
     for _name, _ra, _dec, _mag, kind in DEEP_SKY:
