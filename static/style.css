@@ -314,14 +314,12 @@ body {
 }
 .sun-line::after {
   position: absolute;
-  right: 4px;
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: #e0564a;
   background: var(--bg);
-  padding: 0 4px;
 }
 .sun-line-sunset::after {
   content: 'Sunset';
