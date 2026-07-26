@@ -138,7 +138,16 @@
               <input type="radio" name="obsMode" id="modeFixed" value="fixed">
               <span style="font-weight: 500; font-size: 15px;">Choix 1 : Plage horaire définie fixe</span>
             </label>
-            <p class="settings-hint" style="margin-left: 28px; margin-top: 0;">20h00 – 06h00 (S'applique pour aujourd'hui et tous les jours du calendrier).</p>
+            
+            <div style="margin-left: 28px; display: flex; align-items: center; gap: 10px;">
+              <label for="fixedStartInput" style="font-size: 14px; color: #aaa;">De :</label>
+              <input type="time" id="fixedStartInput" value="20:00" style="padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; outline: none;">
+              
+              <label for="fixedEndInput" style="font-size: 14px; color: #aaa;">À :</label>
+              <input type="time" id="fixedEndInput" value="06:00" style="padding: 6px; background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; outline: none;">
+            </div>
+            
+            <p class="settings-hint" style="margin-left: 28px; margin-top: 0;">S'applique pour aujourd'hui et tous les jours du calendrier.</p>
           </div>
           
           <div style="height: 1px; background: #333; width: 100%;"></div>

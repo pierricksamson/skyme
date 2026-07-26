@@ -23,6 +23,8 @@
   // Nouveaux paramètres 
   const PREF_MODE_KEY = 'skyme_pref_mode'; // 'fixed' ou 'margin'
   const PREF_MARGIN_VAL_KEY = 'skyme_pref_margin_val'; // int (défaut: 30)
+  const PREF_FIXED_START_KEY = 'skyme_pref_fixed_start'; // NOUVEAU
+  const PREF_FIXED_END_KEY = 'skyme_pref_fixed_end';     // NOUVEAU
 
   const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   let currentLat = null;
@@ -43,6 +45,14 @@
   function getObsMargin() {
     const stored = localStorage.getItem(PREF_MARGIN_VAL_KEY);
     return stored !== null ? parseInt(stored, 10) : 30;
+  }
+
+  function getFixedStart() {
+    return localStorage.getItem(PREF_FIXED_START_KEY) || '20:00';
+  }
+
+  function getFixedEnd() {
+    return localStorage.getItem(PREF_FIXED_END_KEY) || '06:00';
   }
 
   function fmtTime(iso) {
@@ -109,10 +119,18 @@
       }
       
       let startFixed = new Date(dateToUse);
-      startFixed.setHours(20, 0, 0, 0); // 20:00 locale
+      const startStr = getFixedStart().split(':');
+      startFixed.setHours(parseInt(startStr[0], 10), parseInt(startStr[1], 10), 0, 0);
+      
       let endFixed = new Date(dateToUse);
-      endFixed.setDate(endFixed.getDate() + 1); // Jour suivant
-      endFixed.setHours(6, 0, 0, 0); // 06:00 locale
+      const endStr = getFixedEnd().split(':');
+      endFixed.setHours(parseInt(endStr[0], 10), parseInt(endStr[1], 10), 0, 0);
+
+      // Si l'heure de fin est inférieure ou égale à l'heure de début (ex: 20h -> 6h), 
+      // on comprend que la fin se trouve le jour suivant.
+      if (endFixed <= startFixed) {
+        endFixed.setDate(endFixed.getDate() + 1);
+      }
 
       let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}`;
       url += `&fixed_start=${startFixed.toISOString()}&fixed_end=${endFixed.toISOString()}`;
@@ -171,7 +189,7 @@
 
     hours.style.height = `${totalPx}px`;
     lanes.style.height = `${totalPx}px`;
-    wrap.style.height = `${totalPx}px`;
+    wrap.style.height = `${totalPx+15}px`;
 
     let tickMinutes = 60;
     if (hourPx >= 260) tickMinutes = 15;
@@ -468,17 +486,25 @@
   const modeFixedRadio = document.getElementById('modeFixed');
   const modeMarginRadio = document.getElementById('modeMargin');
   const marginInput = document.getElementById('marginInput');
+  const fixedStartInput = document.getElementById('fixedStartInput');
+  const fixedEndInput = document.getElementById('fixedEndInput');
 
   function loadPreferences() {
     const mode = getObsMode();
     if (mode === 'fixed') {
       modeFixedRadio.checked = true;
       marginInput.disabled = true;
+      fixedStartInput.disabled = false;
+      fixedEndInput.disabled = false;
     } else {
       modeMarginRadio.checked = true;
       marginInput.disabled = false;
+      fixedStartInput.disabled = true;
+      fixedEndInput.disabled = true;
     }
     marginInput.value = getObsMargin();
+    fixedStartInput.value = getFixedStart();
+    fixedEndInput.value = getFixedEnd();
   }
 
   function savePreferences() {
@@ -486,10 +512,18 @@
     let margin = parseInt(marginInput.value, 10);
     if (isNaN(margin) || margin < 0) margin = 0;
     
+    // Si l'utilisateur efface tout, on fallback sur les valeurs par défaut
+    const startVal = fixedStartInput.value || '20:00';
+    const endVal = fixedEndInput.value || '06:00';
+    
     localStorage.setItem(PREF_MODE_KEY, mode);
     localStorage.setItem(PREF_MARGIN_VAL_KEY, margin.toString());
+    localStorage.setItem(PREF_FIXED_START_KEY, startVal);
+    localStorage.setItem(PREF_FIXED_END_KEY, endVal);
     
     marginInput.disabled = (mode === 'fixed');
+    fixedStartInput.disabled = (mode !== 'fixed');
+    fixedEndInput.disabled = (mode !== 'fixed');
 
     if (currentLat !== null && currentLon !== null) {
       const dateStr = currentData && currentData.requested_date ? currentData.requested_date : undefined;
@@ -500,6 +534,9 @@
   modeFixedRadio.addEventListener('change', savePreferences);
   modeMarginRadio.addEventListener('change', savePreferences);
   marginInput.addEventListener('change', savePreferences);
+  fixedStartInput.addEventListener('change', savePreferences);
+  fixedEndInput.addEventListener('change', savePreferences);
+  
   loadPreferences();
 
   // ---------- Overview: library stats ----------
