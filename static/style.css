@@ -1144,3 +1144,27 @@ body.red-filter::after {
   font-size: 16px;
   color: var(--accent);
 }
+
+/* ---------- No-location placeholder states ---------- */
+.locked-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.locked-state p { margin: 0; max-width: 260px; }
+.locked-state-abs {
+  position: absolute;
+  inset: 0;
+}
+
+/* ---------- Leaflet map picker theming ---------- */
+.leaflet-container {
+  background: var(--bg-elevated) !important;
+  font-family: var(--font-body) !important;
+}

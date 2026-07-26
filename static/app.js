@@ -27,6 +27,10 @@
     pref_fixed_end: '06:00',
     pref_min_alt: 10,
     red_filter: false,
+    loc_mode: 'auto',
+    loc_lat: null,
+    loc_lon: null,
+    loc_elev: 0,
   };
 
   let zoomMode = 'auto';
@@ -128,20 +132,99 @@
   function showError(msg) {
     statusPanel.classList.add('hidden');
     mainContent.classList.add('hidden');
-    bottomNav.classList.add('hidden');
     errorPanel.classList.remove('hidden');
     errorText.textContent = msg;
   }
 
-  function start() {
+  // L'app doit toujours pouvoir s'ouvrir (nav + réglages accessibles) même
+  // sans position connue : seul le contenu qui dépend du ciel (timeline,
+  // schedule, overview, agenda) reste en état "verrouillé" tant qu'aucune
+  // position (GPS ou manuelle) n'est disponible.
+  function showAppShell() {
+    statusPanel.classList.add('hidden');
     errorPanel.classList.add('hidden');
-    mainContent.classList.add('hidden');
-    bottomNav.classList.add('hidden');
-    statusPanel.classList.remove('hidden');
-    setStatus('Requesting GPS location…');
+    mainContent.classList.remove('hidden');
+    bottomNav.classList.remove('hidden');
+  }
+
+  function isLocationSet() {
+    return currentLat !== null && currentLon !== null && !isNaN(currentLat) && !isNaN(currentLon);
+  }
+
+  function updateLocCurrentLine() {
+    const el = document.getElementById('locCurrentLine');
+    if (!el) return;
+    el.textContent = isLocationSet()
+      ? `Position actuelle : ${currentLat.toFixed(3)}°, ${currentLon.toFixed(3)}°`
+      : 'Position actuelle : non définie';
+  }
+
+  function renderNoLocation(msg) {
+    currentData = null;
+    if (nowLineTimer) { clearInterval(nowLineTimer); nowLineTimer = null; }
+
+    document.getElementById('tlDate').textContent = '—';
+    document.getElementById('tlHours').innerHTML = '';
+    const tlWrap = document.getElementById('tlWrap');
+    tlWrap.style.height = '220px';
+    const tlLanes = document.getElementById('tlLanes');
+    tlLanes.style.height = '220px';
+    tlLanes.style.backgroundImage = 'none';
+    tlLanes.innerHTML = `<div class="locked-state locked-state-abs"><p>${msg}</p>
+      <button type="button" class="retry-btn locked-settings-btn">Ouvrir les paramètres</button></div>`;
+    ['sunsetLine', 'sunriseLine', 'nowLine'].forEach((id) => {
+      document.getElementById(id).style.display = 'none';
+    });
+
+    document.getElementById('scheduleBody').innerHTML =
+      `<div class="locked-state"><p>${msg}</p>
+        <button type="button" class="retry-btn locked-settings-btn">Ouvrir les paramètres</button></div>`;
+
+    document.getElementById('sunsetTime').textContent = '--:--';
+    document.getElementById('sunriseTime').textContent = '--:--';
+    document.getElementById('objectCount').textContent = '0';
+    document.getElementById('legend').innerHTML = '';
+
+    const agendaIntro = document.querySelector('.agenda-intro');
+    if (agendaIntro) agendaIntro.textContent = 'Définis ta position dans Paramètres pour charger le ciel d\u2019un soir.';
+
+    locLine.textContent = 'Position non définie';
+    updateLocCurrentLine();
+
+    document.querySelectorAll('.locked-settings-btn').forEach((btn) => {
+      btn.addEventListener('click', () => switchView('settings'));
+    });
+
+    renderLibraryStats(); // ne dépend pas de la position
+  }
+
+  // Décide comment obtenir la position (GPS ou manuelle) puis lance le
+  // calcul du ciel, ou affiche l'état "position non définie" si rien n'est
+  // disponible. L'app (nav + réglages) reste toujours accessible.
+  function resolveLocation() {
+    showAppShell();
+    const auto = settingsCache.loc_mode !== 'manual';
+
+    if (!auto) {
+      const lat = parseFloat(settingsCache.loc_lat);
+      const lon = parseFloat(settingsCache.loc_lon);
+      if (isNaN(lat) || isNaN(lon)) {
+        currentLat = null;
+        currentLon = null;
+        renderNoLocation('Aucune position définie. Choisis-la sur la carte ou saisis-la dans Paramètres.');
+        return;
+      }
+      currentLat = lat;
+      currentLon = lon;
+      currentElev = parseFloat(settingsCache.loc_elev) || 0;
+      locLine.textContent = `${lat.toFixed(3)}°, ${lon.toFixed(3)}°`;
+      updateLocCurrentLine();
+      fetchSky(currentLat, currentLon, currentElev);
+      return;
+    }
 
     if (!navigator.geolocation) {
-      showError('Geolocation is not supported by this browser.');
+      renderNoLocation('La géolocalisation n\u2019est pas supportée par ce navigateur. Définis ta position manuellement dans Paramètres.');
       return;
     }
 
@@ -152,10 +235,14 @@
         currentLon = longitude;
         currentElev = altitude || 0;
         locLine.textContent = `${latitude.toFixed(3)}°, ${longitude.toFixed(3)}°`;
-        setStatus('Calculating tonight\u2019s sky…');
+        updateLocCurrentLine();
         fetchSky(currentLat, currentLon, currentElev);
       },
-      () => showError('Location access denied. Enable GPS/location permissions and try again.'),
+      () => {
+        currentLat = null;
+        currentLon = null;
+        renderNoLocation('Localisation refusée ou indisponible. Active le GPS ou définis ta position manuellement dans Paramètres.');
+      },
       { enableHighAccuracy: true, timeout: 15000 }
     );
   }
@@ -215,6 +302,10 @@
     document.getElementById('objectCount').textContent = data.objects.length;
     document.getElementById('tlDate').textContent = new Date(data.sunset)
       .toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+
+    const agendaIntro = document.querySelector('.agenda-intro');
+    if (agendaIntro) agendaIntro.textContent = 'Tap a night to load its sky.';
+    updateLocCurrentLine();
 
     renderTimeline(data);
     renderLegend(data);
@@ -549,8 +640,8 @@
     btn.addEventListener('click', () => switchView(btn.dataset.view));
   });
 
-  refreshBtn.addEventListener('click', start);
-  retryBtn.addEventListener('click', start);
+  refreshBtn.addEventListener('click', resolveLocation);
+  retryBtn.addEventListener('click', resolveLocation);
 
   function toDateStr(d) {
     const y = d.getFullYear();
@@ -704,6 +795,107 @@
       saveSettings({ red_filter: enabled });
     });
   }
+
+  // ---------- Settings: Localisation (GPS auto / carte / manuel) ----------
+  const locAutoToggle = document.getElementById('locAutoToggle');
+  const locAutoHint = document.getElementById('locAutoHint');
+  const locManualBlock = document.getElementById('locManualBlock');
+  const locLatInput = document.getElementById('locLatInput');
+  const locLonInput = document.getElementById('locLonInput');
+  const locElevInput = document.getElementById('locElevInput');
+  const locSaveBtn = document.getElementById('locSaveBtn');
+  const locMapBtn = document.getElementById('locMapBtn');
+  const mapOverlay = document.getElementById('mapOverlay');
+  const mapClose = document.getElementById('mapClose');
+  const mapValidate = document.getElementById('mapValidate');
+
+  function loadLocationPreferences() {
+    const auto = settingsCache.loc_mode !== 'manual';
+    locAutoToggle.checked = auto;
+    locManualBlock.classList.toggle('hidden', auto);
+    locAutoHint.textContent = auto
+      ? 'L\u2019application utilise la position GPS de l\u2019appareil.'
+      : 'Position définie manuellement ci-dessous.';
+
+    if (settingsCache.loc_lat !== null && settingsCache.loc_lat !== undefined) {
+      locLatInput.value = settingsCache.loc_lat;
+    }
+    if (settingsCache.loc_lon !== null && settingsCache.loc_lon !== undefined) {
+      locLonInput.value = settingsCache.loc_lon;
+    }
+    locElevInput.value = (settingsCache.loc_elev !== null && settingsCache.loc_elev !== undefined)
+      ? settingsCache.loc_elev : 0;
+
+    updateLocCurrentLine();
+  }
+
+  locAutoToggle.addEventListener('change', () => {
+    const auto = locAutoToggle.checked;
+    locManualBlock.classList.toggle('hidden', auto);
+    locAutoHint.textContent = auto
+      ? 'L\u2019application utilise la position GPS de l\u2019appareil.'
+      : 'Position définie manuellement ci-dessous.';
+    saveSettings({ loc_mode: auto ? 'auto' : 'manual' });
+    resolveLocation();
+  });
+
+  locSaveBtn.addEventListener('click', () => {
+    const lat = parseFloat(locLatInput.value);
+    const lon = parseFloat(locLonInput.value);
+    let elev = parseFloat(locElevInput.value);
+    if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lon) || lon < -180 || lon > 180) {
+      locAutoHint.textContent = 'Latitude ou longitude invalide.';
+      return;
+    }
+    if (isNaN(elev)) elev = 0;
+    saveSettings({ loc_mode: 'manual', loc_lat: lat, loc_lon: lon, loc_elev: elev });
+    locAutoToggle.checked = false;
+    locManualBlock.classList.remove('hidden');
+    locAutoHint.textContent = 'Position définie manuellement ci-dessous.';
+    resolveLocation();
+  });
+
+  // Carte de sélection : Leaflet + tuiles OpenStreetMap (gratuit, sans clé API).
+  let pickerMap = null;
+  let pickerMarker = null;
+
+  function openMapPicker() {
+    mapOverlay.classList.remove('hidden');
+    const fallbackLat = parseFloat(locLatInput.value) || currentLat || 48.8566;
+    const fallbackLon = parseFloat(locLonInput.value) || currentLon || 2.3522;
+
+    if (!pickerMap) {
+      pickerMap = L.map('mapPicker').setView([fallbackLat, fallbackLon], 6);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '\u00a9 OpenStreetMap contributors',
+      }).addTo(pickerMap);
+      pickerMarker = L.marker([fallbackLat, fallbackLon], { draggable: true }).addTo(pickerMap);
+      pickerMap.on('click', (e) => pickerMarker.setLatLng(e.latlng));
+    } else {
+      pickerMap.setView([fallbackLat, fallbackLon], pickerMap.getZoom());
+      pickerMarker.setLatLng([fallbackLat, fallbackLon]);
+    }
+    // La modale vient d'apparaître : Leaflet a besoin d'un recalcul de taille.
+    setTimeout(() => pickerMap.invalidateSize(), 150);
+  }
+
+  function closeMapPicker() {
+    mapOverlay.classList.add('hidden');
+  }
+
+  locMapBtn.addEventListener('click', openMapPicker);
+  mapClose.addEventListener('click', closeMapPicker);
+  mapOverlay.addEventListener('click', (e) => {
+    if (e.target.id === 'mapOverlay') closeMapPicker();
+  });
+  mapValidate.addEventListener('click', () => {
+    if (!pickerMarker) return;
+    const { lat, lng } = pickerMarker.getLatLng();
+    locLatInput.value = lat.toFixed(4);
+    locLonInput.value = lng.toFixed(4);
+    closeMapPicker();
+  });
 
   // ---------- Overview: library stats ----------
   async function fetchCatalogStatsOnce() {
@@ -1095,7 +1287,8 @@
   async function initApp() {
     await loadSettingsFromServer();
     loadPreferences();
-    start();
+    loadLocationPreferences();
+    resolveLocation();
   }
   initApp();
 })();
