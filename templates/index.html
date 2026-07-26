@@ -12,7 +12,7 @@
 <body>
   <div class="app">
 
-    <header class="topbar">
+    <header class="topbar" style="position: sticky; top: 0; background-color: rgba(9, 9, 10, 0.92);;">
       <div class="brand">
         <span class="brand-mark">✦</span>
         <span class="brand-word">Skyme</span>
@@ -132,11 +132,12 @@
         <div class="section-heading"><h2>Paramètres</h2></div>
         
         <div class="settings-card" style="display: flex; flex-direction: column; gap: 20px;">
-          
+          <span style="font-weight: 900; font-size: 22px; font-family: var(--font-display);">Plage horaire</span>
           <div style="display: flex; flex-direction: column; gap: 8px;">
+            
             <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
               <input type="radio" name="obsMode" id="modeFixed" value="fixed">
-              <span style="font-weight: 500; font-size: 15px;">Choix 1 : Plage horaire définie fixe</span>
+              <span style="font-weight: 500; font-size: 15px;">Plage horaire définie fixe</span>
             </label>
             
             <div style="margin-left: 28px; display: flex; align-items: center; gap: 10px;">
@@ -155,7 +156,7 @@
           <div style="display: flex; flex-direction: column; gap: 12px;">
             <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
               <input type="radio" name="obsMode" id="modeMargin" value="margin" checked>
-              <span style="font-weight: 500; font-size: 15px;">Choix 2 : Marge autour du coucher/lever du soleil</span>
+              <span style="font-weight: 500; font-size: 15px;">Marge autour du coucher/lever du soleil</span>
             </label>
             
             <div style="margin-left: 28px; display: flex; align-items: center; gap: 10px;">
