@@ -13,7 +13,16 @@
   const ZOOM_MIN = 0.5;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
-  let zoomLevel = 0.5;
+  const ZOOM_MODE_KEY = 'skyme_zoom_mode';   // 'auto' ou 'manual'
+  const ZOOM_VALUE_KEY = 'skyme_zoom_value'; // valeur numérique, utilisée seulement si mode = 'manual'
+
+  let zoomMode = localStorage.getItem(ZOOM_MODE_KEY) === 'manual' ? 'manual' : 'auto';
+  let zoomLevel = 1; // valeur réelle courante, recalculée si zoomMode === 'auto'
+
+  if (zoomMode === 'manual') {
+    const stored = parseFloat(localStorage.getItem(ZOOM_VALUE_KEY));
+    zoomLevel = isNaN(stored) ? 1 : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, stored));
+  }
 
   let currentData = null;
   let nowLineTimer = null;
@@ -180,13 +189,38 @@
     nowLineTimer = setInterval(() => positionNowLine(data), 30000);
   }
 
-  function renderTimeline(data, anchorTimeMs) {
+  // Calcule le niveau de zoom qui fait tenir toute la fenêtre d'observation
+  // (window_start -> window_end) exactement dans l'espace vertical libre,
+  // borné entre ZOOM_MIN (50%) et ZOOM_MAX (300%).
+  function computeFitZoom(data) {
+    const wrap = document.getElementById('tlWrap');
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const totalMin = (end - start) / 60000;
+    if (!totalMin || totalMin <= 0) return 1;
+
+    const navH = bottomNav ? bottomNav.offsetHeight : 0;
+    const wrapTop = wrap.getBoundingClientRect().top;
+    const buffer = 20; // petite marge de sécurité
+    const availableHeight = Math.max(window.innerHeight - wrapTop - navH - buffer, 100);
+
+    const fit = availableHeight - 10 / (totalMin * BASE_PX_PER_MIN);
+    console.log(fit)
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  }
+
+  function renderTimeline(data) {
     const hours = document.getElementById('tlHours');
     const lanesScroll = document.getElementById('tlLanesScroll');
     const lanes = document.getElementById('tlLanes');
     const wrap = document.getElementById('tlWrap');
     hours.innerHTML = '';
     lanes.innerHTML = '';
+
+    if (zoomMode === 'auto') {
+      zoomLevel = computeFitZoom(data);
+    }
+    updateZoomFitButton();
 
     const pxPerMin = BASE_PX_PER_MIN * zoomLevel;
     const start = new Date(data.window_start).getTime();
@@ -257,34 +291,95 @@
       lanes.appendChild(block);
     });
 
-    if (typeof anchorTimeMs === 'number') {
-      const scroller = document.querySelector('.view#view-timeline');
-      const topOffset = ((anchorTimeMs - start) / 60000) * pxPerMin;
-      window.scrollTo({ top: wrap.offsetTop + topOffset - 90, behavior: 'auto' });
-    }
-
     document.getElementById('zoomPct').textContent = `${Math.round(zoomLevel * 100)}%`;
   }
+
+  // Point d'ancrage exprimé en position à l'écran (viewport), pas en position
+  // dans le document : c'est ce qui évite le bug de recentrage, qui venait du
+  // mélange de coordonnées (window.scrollY, relatif au document) avec
+  // wrap.offsetTop (relatif à l'offsetParent, pas toujours le document).
+  const ANCHOR_VIEWPORT_OFFSET = 90; // px depuis le haut du viewport
 
   function currentTopAnchorMs(data) {
     const wrap = document.getElementById('tlWrap');
     const pxPerMin = BASE_PX_PER_MIN * zoomLevel;
     const start = new Date(data.window_start).getTime();
-    const scrollOffset = window.scrollY - wrap.offsetTop + 90;
+    const wrapTop = wrap.getBoundingClientRect().top; // position actuelle du wrap dans le viewport
+    const scrollOffset = ANCHOR_VIEWPORT_OFFSET - wrapTop;
     return start + Math.max(scrollOffset, 0) / pxPerMin * 60000;
+  }
+
+  function applyScrollForAnchor(data, anchorTimeMs) {
+    const wrap = document.getElementById('tlWrap');
+    const pxPerMin = BASE_PX_PER_MIN * zoomLevel;
+    const start = new Date(data.window_start).getTime();
+    const topOffset = ((anchorTimeMs - start) / 60000) * pxPerMin;
+    const wrapDocTop = wrap.getBoundingClientRect().top + window.scrollY;
+    const targetScroll = Math.max(wrapDocTop + topOffset - ANCHOR_VIEWPORT_OFFSET, 0);
+    window.scrollTo({ top: targetScroll, behavior: 'auto' });
   }
 
   function setZoom(newZoom) {
     if (!currentData) return;
+    zoomMode = 'manual';
     const anchor = currentTopAnchorMs(currentData);
     zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
-    renderTimeline(currentData, anchor);
+    localStorage.setItem(ZOOM_MODE_KEY, 'manual');
+    localStorage.setItem(ZOOM_VALUE_KEY, String(zoomLevel));
+    renderTimeline(currentData); // le scroll est réappliqué nous-mêmes ci-dessous
     positionNowLine(currentData);
     positionSunLines(currentData);
+    // On réapplique le scroll après le prochain repaint : ça évite qu'un
+    // ajustement de scroll automatique du navigateur (ex: focus du bouton
+    // tapé) n'écrase notre position et ne recentre la page.
+    requestAnimationFrame(() => {
+      applyScrollForAnchor(currentData, anchor);
+      requestAnimationFrame(() => applyScrollForAnchor(currentData, anchor));
+    });
   }
 
-  document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoomLevel + ZOOM_STEP));
-  document.getElementById('zoomOut').addEventListener('click', () => setZoom(zoomLevel - ZOOM_STEP));
+  function resetZoomToFit() {
+    if (!currentData) return;
+    zoomMode = 'auto';
+    localStorage.setItem(ZOOM_MODE_KEY, 'auto');
+    localStorage.removeItem(ZOOM_VALUE_KEY); // on ne stocke jamais la valeur calculée de l'auto
+    renderTimeline(currentData); // renderTimeline recalcule zoomLevel car zoomMode === 'auto'
+    positionNowLine(currentData);
+    positionSunLines(currentData);
+    requestAnimationFrame(() => window.scrollTo({ top: window.scrollY, behavior: 'auto' }));
+  }
+
+  function updateZoomFitButton() {
+    const btn = document.getElementById('zoomFit');
+    if (btn) btn.classList.toggle('active', zoomMode === 'auto');
+  }
+
+  document.getElementById('zoomIn').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    setZoom(zoomLevel + ZOOM_STEP);
+  });
+  document.getElementById('zoomOut').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    setZoom(zoomLevel - ZOOM_STEP);
+  });
+  document.getElementById('zoomFit').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    resetZoomToFit();
+  });
+
+  // Si on est en mode "fit", on recalcule le zoom quand la fenêtre change de
+  // taille (rotation d'écran, redimensionnement) pour que ça continue à bien
+  // remplir l'espace disponible.
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (zoomMode !== 'auto' || !currentData) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      renderTimeline(currentData);
+      positionNowLine(currentData);
+      positionSunLines(currentData);
+    }, 150);
+  });
 
   let pinchStartDist = null;
   let pinchStartZoom = 1;

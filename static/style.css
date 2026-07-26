@@ -185,6 +185,13 @@ body {
   justify-content: center;
 }
 .zoom-btn:active { background: var(--accent-soft); }
+.zoom-fit-btn {
+  font-size: 12px;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  margin-right: 2px;
+}
+.zoom-fit-btn.active { color: var(--text); background: var(--accent-soft); }
 .zoom-pct {
   font-family: var(--font-mono);
   font-size: 10px;
