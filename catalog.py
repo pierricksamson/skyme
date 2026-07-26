@@ -55,40 +55,12 @@ PLANETS = {
     "Neptune": "neptune barycenter",
 }
 
-# Astéroïdes principaux (nom d'affichage -> identifiant MPC / Ephemeris)
-ASTEROIDS = {
-    "Ceres": "1 Ceres",
-    "Vesta": "4 Vesta",
-    "Pallas": "2 Pallas",
-    "Juno": "3 Juno",
-    "Eros": "433 Eros",
-}
 
-# Comètes notables (nom d'affichage -> désignation officielle)
-COMETS = {
-    "1P/Halley": "1P/Halley",
-    "67P/Churyumov-Gerasimenko": "67P",
-    "C/2020 F3 (NEOWISE)": "C/2020 F3",
-    "C/2023 A3 (Tsuchinshan-ATLAS)": "C/2023 A3",
-}
-
-# Objets artificiels (nom d'affichage -> nom TLE CelesTrak)
-ARTIFICIAL_OBJECTS = {
-    "ISS (Station Spatiale)": "ISS (ZARYA)",
-    "Télescope Hubble": "HST",
-    "Station Tiangong": "CSS (TIANGONG)",
-    "Télescope James Webb": "JWST",
-}
-
-# Dictionnaire de couleurs mis à jour
 CATEGORY_COLOR = {
-    "moon":       "#d9d2c4",
-    "planet":     "#c98a4b",
-    "star":       "#eae0b8",
-    "galaxy":     "#8f7fc9",
-    "nebula":     "#c4577f",
-    "cluster":    "#4fa89c",
-    "asteroid":   "#a39382",  # Ton gris/rocheux
-    "comet":      "#52b2bf",  # Cyan/bleu glacé
-    "artificial": "#e74c3c",  # Rouge/orange vif
+    "moon":    "#d9d2c4",
+    "planet":  "#c98a4b",
+    "star":    "#eae0b8",
+    "galaxy":  "#8f7fc9",
+    "nebula":  "#c4577f",
+    "cluster": "#4fa89c",
 }
