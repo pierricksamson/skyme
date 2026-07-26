@@ -19,7 +19,6 @@ from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
 app = Flask(__name__)
 
 STEP_MINUTES = 4
-MIN_ALT = 0.0  # degrees, horizon cutoff
 
 # Approximate mean apparent magnitudes (true planetary magnitude depends on
 # phase & sun-earth-planet distance, but fixed values keep the app fully
@@ -50,7 +49,7 @@ def moon_magnitude(t, location):
     return round(-12.7 + 2.5 * np.log10(1 / illum), 2)
 
 
-def find_night_window(location, now_utc, min_alt=MIN_ALT):
+def find_night_window(location, now_utc, min_alt=10.0):
     """Sample the sun's altitude across the next ~36h to find the coming
     moment it crosses below `min_alt` (sunset, or dusk) and the following
     moment it crosses back above it (sunrise, or dawn)."""
@@ -91,7 +90,7 @@ def build_time_array(t_start, t_end, step_minutes=STEP_MINUTES):
     return t_start + offsets * u.minute
 
 
-def find_visibility_window(alt_deg, min_alt=MIN_ALT):
+def find_visibility_window(alt_deg, min_alt=10.0):
     above = alt_deg > min_alt
     if not np.any(above):
         return None
@@ -107,19 +106,19 @@ def find_visibility_window(alt_deg, min_alt=MIN_ALT):
 
 
 def compute_object(coord, name, category, fixed_mag, t_start, t_end,
-                    t_list, frame_list, location, is_moon=False):
+                    t_list, frame_list, location, min_alt=10.0, is_moon=False):
     altaz = coord.transform_to(frame_list)
     alt_deg = altaz.alt.deg
 
-    result = find_visibility_window(alt_deg)
+    result = find_visibility_window(alt_deg, min_alt)
     if result is None:
         return None
     first, last, touches_start, touches_end = result
 
     rise_t = t_start if touches_start else _interp_time(
-        t_list[first - 1], t_list[first], alt_deg[first - 1], alt_deg[first], MIN_ALT)
+        t_list[first - 1], t_list[first], alt_deg[first - 1], alt_deg[first], min_alt)
     set_t = t_end if touches_end else _interp_time(
-        t_list[last], t_list[last + 1], alt_deg[last], alt_deg[last + 1], MIN_ALT)
+        t_list[last], t_list[last + 1], alt_deg[last], alt_deg[last + 1], min_alt)
 
     window_alt = alt_deg[first:last + 1]
     peak_alt = float(np.max(window_alt))
@@ -179,6 +178,11 @@ def sky():
 
     date_str = request.args.get("date")
     elev = float(request.args.get("elev", 0) or 0)
+
+    try:
+        min_alt = float(request.args.get("min_alt", 10.0))
+    except (TypeError, ValueError):
+        min_alt = 10.0
     
     if date_str:
         try:
@@ -226,28 +230,28 @@ def sky():
 
     moon_coord = get_body("moon", t_list, location)
     obj = compute_object(moon_coord, "Moon", "moon", None, t_start, t_end,
-                          t_list, frame_list, location, is_moon=True)
+                          t_list, frame_list, location, is_moon=True, min_alt=min_alt)
     if obj:
         objects.append(obj)
 
     for pname, body_key in PLANET_BODY_NAME.items():
         coord = get_body(body_key, t_list, location)
         obj = compute_object(coord, pname, "planet", PLANET_MAG[pname], t_start, t_end,
-                              t_list, frame_list, location)
+                              t_list, frame_list, location, min_alt=min_alt)
         if obj:
             objects.append(obj)
 
     for name, ra, dec, mag in STARS:
         coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         obj = compute_object(coord, name, "star", mag, t_start, t_end,
-                              t_list, frame_list, location)
+                              t_list, frame_list, location, min_alt=min_alt)
         if obj:
             objects.append(obj)
 
     for name, ra, dec, mag, kind in DEEP_SKY:
         coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         obj = compute_object(coord, name, kind, mag, t_start, t_end,
-                              t_list, frame_list, location)
+                              t_list, frame_list, location, min_alt=min_alt)
         if obj:
             objects.append(obj)
 

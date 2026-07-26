@@ -25,6 +25,7 @@
   const PREF_MARGIN_VAL_KEY = 'skyme_pref_margin_val'; // int (défaut: 30)
   const PREF_FIXED_START_KEY = 'skyme_pref_fixed_start'; // NOUVEAU
   const PREF_FIXED_END_KEY = 'skyme_pref_fixed_end';     // NOUVEAU
+  const PREF_MIN_ALT_KEY = 'skyme_pref_min_alt';
 
   const WEEKDAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
   let currentLat = null;
@@ -53,6 +54,11 @@
 
   function getFixedEnd() {
     return localStorage.getItem(PREF_FIXED_END_KEY) || '06:00';
+  }
+
+  function getMinAlt() {
+    const stored = localStorage.getItem(PREF_MIN_ALT_KEY);
+    return stored !== null ? parseFloat(stored) : 10;
   }
 
   function fmtTime(iso) {
@@ -132,7 +138,9 @@
         endFixed.setDate(endFixed.getDate() + 1);
       }
 
-      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}`;
+      const minAlt = getMinAlt();
+
+      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}&min_alt=${minAlt}`; // NOUVEAU (ajout de &min_alt)
       url += `&fixed_start=${startFixed.toISOString()}&fixed_end=${endFixed.toISOString()}`;
       if (dateStr) url += `&date=${dateStr}`;
       
@@ -488,6 +496,7 @@
   const marginInput = document.getElementById('marginInput');
   const fixedStartInput = document.getElementById('fixedStartInput');
   const fixedEndInput = document.getElementById('fixedEndInput');
+  const minAltInput = document.querySelector('input[name="elev"]'); // NOUVEAU
 
   function loadPreferences() {
     const mode = getObsMode();
@@ -505,6 +514,10 @@
     marginInput.value = getObsMargin();
     fixedStartInput.value = getFixedStart();
     fixedEndInput.value = getFixedEnd();
+
+    if (minAltInput) {
+      minAltInput.value = getMinAlt();
+    }
   }
 
   function savePreferences() {
@@ -525,6 +538,13 @@
     fixedStartInput.disabled = (mode !== 'fixed');
     fixedEndInput.disabled = (mode !== 'fixed');
 
+    if (minAltInput) {
+      let minAltVal = parseFloat(minAltInput.value);
+      if (isNaN(minAltVal) || minAltVal < 0) minAltVal = 0;
+      if (minAltVal > 90) minAltVal = 90;
+      localStorage.setItem(PREF_MIN_ALT_KEY, minAltVal.toString());
+    }
+
     if (currentLat !== null && currentLon !== null) {
       const dateStr = currentData && currentData.requested_date ? currentData.requested_date : undefined;
       fetchSky(currentLat, currentLon, currentElev, dateStr);
@@ -537,6 +557,10 @@
   fixedStartInput.addEventListener('change', savePreferences);
   fixedEndInput.addEventListener('change', savePreferences);
   
+  if (minAltInput) {
+      minAltInput.addEventListener('change', savePreferences);
+  }
+
   loadPreferences();
 
   // ---------- Overview: library stats ----------
