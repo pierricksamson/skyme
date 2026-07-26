@@ -18,6 +18,14 @@
   let currentData = null;
   let nowLineTimer = null;
 
+  const AGENDA_DAYS = 30;
+  const PREF_START_KEY = 'skyme_pref_start';
+  const PREF_END_KEY = 'skyme_pref_end';
+  let currentLat = null;
+  let currentLon = null;
+  let currentElev = 0;
+  let agendaBuilt = false;
+
   function fmtTime(iso) {
     const d = new Date(iso);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -57,18 +65,23 @@
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const { latitude, longitude, altitude } = pos.coords;
+        currentLat = latitude;
+        currentLon = longitude;
+        currentElev = altitude || 0;
         locLine.textContent = `${latitude.toFixed(3)}°, ${longitude.toFixed(3)}°`;
         setStatus('Calculating tonight\u2019s sky…');
-        fetchSky(latitude, longitude, altitude || 0);
+        fetchSky(currentLat, currentLon, currentElev);
       },
       () => showError('Location access denied. Enable GPS/location permissions and try again.'),
       { enableHighAccuracy: true, timeout: 15000 }
     );
   }
 
-  async function fetchSky(lat, lon, elev) {
+  async function fetchSky(lat, lon, elev, dateStr) {
     try {
-      const res = await fetch(`/api/sky?lat=${lat}&lon=${lon}&elev=${elev}`);
+      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}`;
+      if (dateStr) url += `&date=${dateStr}`;
+      const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Server error (${res.status})`);
@@ -95,9 +108,11 @@
     renderTimeline(data);
     renderLegend(data);
     renderSchedule(data);
+    buildAgendaList();
 
     if (nowLineTimer) clearInterval(nowLineTimer);
     positionNowLine(data);
+    positionSunLines(data);
     nowLineTimer = setInterval(() => positionNowLine(data), 30000);
   }
 
@@ -201,6 +216,7 @@
     zoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
     renderTimeline(currentData, anchor);
     positionNowLine(currentData);
+    positionSunLines(currentData);
   }
 
   document.getElementById('zoomIn').addEventListener('click', () => setZoom(zoomLevel + ZOOM_STEP));
@@ -240,6 +256,28 @@
     const pxPerMin = BASE_PX_PER_MIN * zoomLevel;
     const topPx = ((now - start) / 60000) * pxPerMin;
     nowLine.style.top = `${topPx}px`;
+  }
+
+  function positionSunLines(data) {
+    const sunsetLine = document.getElementById('sunsetLine');
+    const sunriseLine = document.getElementById('sunriseLine');
+    const pxPerMin = BASE_PX_PER_MIN * zoomLevel;
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const sunset = new Date(data.sunset).getTime();
+    const sunrise = new Date(data.sunrise).getTime();
+
+    [
+      [sunsetLine, sunset],
+      [sunriseLine, sunrise],
+    ].forEach(([el, t]) => {
+      if (t < start || t > end) {
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = 'block';
+      el.style.top = `${((t - start) / 60000) * pxPerMin}px`;
+    });
   }
 
   function renderLegend(data) {
@@ -317,6 +355,70 @@
 
   refreshBtn.addEventListener('click', start);
   retryBtn.addEventListener('click', start);
+
+  // ---------- Agenda (next 30 days) ----------
+  function buildAgendaList() {
+    if (agendaBuilt) return;
+    agendaBuilt = true;
+
+    const list = document.getElementById('agendaList');
+    list.innerHTML = '';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < AGENDA_DAYS; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const dateStr = `${y}-${m}-${day}`;
+
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'agenda-row';
+      const label = i === 0
+        ? 'Tonight'
+        : i === 1
+          ? 'Tomorrow night'
+          : d.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' });
+      row.innerHTML = `
+        <span class="agenda-date">${label}</span>
+        <span class="agenda-arrow">→</span>
+      `;
+      row.addEventListener('click', () => openAgendaDay(dateStr, d));
+      list.appendChild(row);
+    }
+  }
+
+  function openAgendaDay(dateStr, dateObj) {
+    if (currentLat === null || currentLon === null) return;
+    errorPanel.classList.add('hidden');
+    mainContent.classList.add('hidden');
+    bottomNav.classList.add('hidden');
+    statusPanel.classList.remove('hidden');
+    setStatus(`Calculating sky for ${dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })}…`);
+    fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
+  }
+
+  // ---------- Settings: preferred observation time range (localStorage) ----------
+  const prefStartInput = document.getElementById('prefStart');
+  const prefEndInput = document.getElementById('prefEnd');
+
+  function loadPreferences() {
+    prefStartInput.value = localStorage.getItem(PREF_START_KEY) || '20:00';
+    prefEndInput.value = localStorage.getItem(PREF_END_KEY) || '06:00';
+  }
+
+  function savePreferences() {
+    localStorage.setItem(PREF_START_KEY, prefStartInput.value || '00:00');
+    localStorage.setItem(PREF_END_KEY, prefEndInput.value || '23:59');
+  }
+
+  prefStartInput.addEventListener('change', savePreferences);
+  prefEndInput.addEventListener('change', savePreferences);
+  loadPreferences();
 
   start();
 })();

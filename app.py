@@ -177,8 +177,16 @@ def sky():
     except (KeyError, ValueError):
         return jsonify({"error": "lat/lon required"}), 400
 
+    date_str = request.args.get("date")
+    if date_str:
+        try:
+            now_utc = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return jsonify({"error": "date must be formatted YYYY-MM-DD"}), 400
+    else:
+        now_utc = datetime.now(timezone.utc)
+
     location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
-    now_utc = datetime.now(timezone.utc)
 
     sunset_t, sunrise_t = find_night_window(location, now_utc)
     t_start = sunset_t - 30 * u.minute
@@ -218,6 +226,7 @@ def sky():
     objects_sorted, lane_count = assign_lanes(objects)
 
     return jsonify({
+        "requested_date": date_str,
         "sunset": sunset_t.utc.isot + "Z",
         "sunrise": sunrise_t.utc.isot + "Z",
         "window_start": t_start.utc.isot + "Z",

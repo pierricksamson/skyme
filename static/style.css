@@ -294,6 +294,37 @@ body {
   box-shadow: 0 0 8px rgba(212,175,106,0.9);
 }
 
+.sun-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #e0564a;
+  box-shadow: 0 0 6px rgba(224,86,74,0.65);
+  pointer-events: none;
+  z-index: 3;
+  display: none;
+}
+.sun-line::after {
+  position: absolute;
+  right: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #e0564a;
+  background: var(--bg);
+  padding: 0 4px;
+}
+.sun-line-sunset::after {
+  content: 'Sunset';
+  top: -13px;
+}
+.sun-line-sunrise::after {
+  content: 'Sunrise';
+  top: 4px;
+}
+
 /* ---------- Summary (Overview) ---------- */
 .window-summary {
   display: flex;
@@ -405,6 +436,90 @@ body {
 
 @media (max-width: 380px) {
   .schedule-row { grid-template-columns: 1.7fr 0.8fr 0.8fr 0.8fr 1fr; font-size: 11px; }
+}
+
+/* ---------- Agenda ---------- */
+.agenda-intro {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin: 0 0 14px;
+}
+.agenda-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.agenda-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--hairline);
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+}
+.agenda-row:last-child { border-bottom: none; }
+.agenda-row:active { background: rgba(212,175,106,0.06); }
+.agenda-arrow {
+  color: var(--accent);
+  font-size: 14px;
+}
+
+/* ---------- Settings ---------- */
+.settings-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px 16px;
+}
+.settings-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0 0 14px;
+}
+.time-range-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+.time-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.time-field input[type="time"] {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--accent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color-scheme: dark;
+}
+.time-range-sep {
+  padding-bottom: 9px;
+  color: var(--text-muted);
+}
+.settings-hint {
+  margin: 14px 0 0;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* ---------- Bottom nav ---------- */
