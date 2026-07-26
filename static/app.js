@@ -689,6 +689,12 @@
     return d;
   }
 
+  function headingLabel(heading) {
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const idx = Math.round(heading / 45) % 8;
+    return dirs[idx];
+  }
+
   function handleCompassHeading(heading) {
     const dial = document.getElementById('compassDial');
     const readout = document.getElementById('compassHeading');
