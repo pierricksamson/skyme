@@ -204,8 +204,7 @@
     const buffer = 20; // petite marge de sécurité
     const availableHeight = Math.max(window.innerHeight - wrapTop - navH - buffer, 100);
 
-    const fit = availableHeight - 10 / (totalMin * BASE_PX_PER_MIN);
-    console.log(fit)
+    const fit = (availableHeight - 20) / (totalMin * BASE_PX_PER_MIN);
     return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
   }
 
@@ -304,9 +303,9 @@
     const wrap = document.getElementById('tlWrap');
     const pxPerMin = BASE_PX_PER_MIN * zoomLevel;
     const start = new Date(data.window_start).getTime();
-    const wrapTop = wrap.getBoundingClientRect().top; // position actuelle du wrap dans le viewport
+    const wrapTop = wrap.getBoundingClientRect().top;
     const scrollOffset = ANCHOR_VIEWPORT_OFFSET - wrapTop;
-    return start + Math.max(scrollOffset, 0) / pxPerMin * 60000;
+    return start + (scrollOffset / pxPerMin) * 60000;
   }
 
   function applyScrollForAnchor(data, anchorTimeMs) {
