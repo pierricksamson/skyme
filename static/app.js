@@ -829,14 +829,33 @@
 
     let svgMarkup = `
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--hairline)" stroke-width="1"/>
+    `;
+
+    // Graduations : petites toutes les heures, moyennes tous les 3h, grandes tous les 6h
+    for (let h = 0; h < 24; h++) {
+      const a = (h * 15 - 90) * Math.PI / 180;
+      const isMajor = h % 6 === 0;
+      const isMedium = !isMajor && h % 2 === 0; // tiers du secteur de 6h : 2h, 4h, 8h, 10h...
+      const tickLen = isMajor ? 10 : (isMedium ? 7 : 4);
+      const tickWidth = isMajor ? 1.6 : (isMedium ? 1.2 : 0.8);
+      const x1 = cx + r * Math.cos(a);
+      const y1 = cy + r * Math.sin(a);
+      const x2 = cx + (r - tickLen) * Math.cos(a);
+      const y2 = cy + (r - tickLen) * Math.sin(a);
+      const tickColor = isMajor ? 'var(--accent)' : 'var(--text-muted)';
+      const tickOpacity = isMajor ? '0.9' : (isMedium ? '0.6' : '0.35');
+      svgMarkup += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${tickColor}" stroke-width="${tickWidth}" opacity="${tickOpacity}"/>`;
+    }
+
+    svgMarkup += `
       <circle cx="${cx}" cy="${cy}" r="3" fill="var(--accent)"/>
       <line x1="${cx}" y1="${cy}" x2="${px}" y2="${py}" stroke="var(--accent)" stroke-width="1.5"/>
       <circle cx="${px}" cy="${py}" r="5" fill="var(--accent)" style="filter: drop-shadow(0 0 4px rgba(212,175,106,0.8));"/>
     `;
     ['0','6','12','18'].forEach((h) => {
       const a = (Number(h) * 15 - 90) * Math.PI / 180;
-      const lx = cx + (r + 10) * Math.cos(a);
-      const ly = cy + (r + 10) * Math.sin(a);
+      const lx = cx + (r + 12) * Math.cos(a);
+      const ly = cy + (r + 12) * Math.sin(a);
       svgMarkup += `<text x="${lx}" y="${ly}" fill="var(--text-muted)" font-size="9" font-family="var(--font-mono)" text-anchor="middle" dominant-baseline="middle">${h}h</text>`;
     });
     svg.innerHTML = svgMarkup;
