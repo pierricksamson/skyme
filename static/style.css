@@ -46,6 +46,15 @@ body {
   min-height: 100vh;
 }
 
+body.red-filter::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(255, 0, 0, 0.25);
+    pointer-events: none;
+    z-index: 999999;
+}
+
 .hidden { display: none !important; }
 
 .app {

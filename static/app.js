@@ -624,7 +624,7 @@
     
     // Si l'utilisateur efface tout, on fallback sur les valeurs par défaut
     const startVal = fixedStartInput.value || '20:00';
-    const endVal = fixedEndInput.value || '06:00';
+    let endVal = fixedEndInput.value || '06:00';
     
     localStorage.setItem(PREF_MODE_KEY, mode);
     localStorage.setItem(PREF_MARGIN_VAL_KEY, margin.toString());
@@ -653,10 +653,8 @@
   marginInput.addEventListener('change', savePreferences);
   fixedStartInput.addEventListener('change', savePreferences);
   fixedEndInput.addEventListener('change', savePreferences);
+  minAltInput.addEventListener('change', savePreferences);
   
-  if (minAltInput) {
-      minAltInput.addEventListener('change', savePreferences);
-  }
 
   loadPreferences();
 
