@@ -140,6 +140,20 @@
     return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
   }
 
+  // Format "1j4h5m" pour les comptes à rebours pouvant s'étaler sur
+  // plusieurs jours (ex : lever d'un objet actuellement sous l'altitude
+  // minimale, à venir dans les 30 prochains jours).
+  function formatCountdownDHM(ms) {
+    if (ms < 0) ms = 0;
+    const totalMin = Math.floor(ms / 60000);
+    const d = Math.floor(totalMin / 1440);
+    const h = Math.floor((totalMin % 1440) / 60);
+    const m = totalMin % 60;
+    if (d > 0) return `${d}j${h}h${m}m`;
+    if (h > 0) return `${h}h${m}m`;
+    return `${m}m`;
+  }
+
   function updateInfoCountdown() {
     if (!infoObj || !infoObj.rise_iso || !infoObj.set_iso) return;
     const now = Date.now();
@@ -1172,8 +1186,21 @@
         whenLine = `<span class="lib-row-when lib-row-when-special">Toujours au-dessus de ${getMinAlt()}°</span>`;
         countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">Toujours visible</span>`;
       } else if (o.never_visible) {
-        whenLine = `<span class="lib-row-when lib-row-when-special">Ne dépasse pas ${getMinAlt()}° ici</span>`;
-        countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">—</span>`;
+        // Toujours sous l'altitude minimale dans l'immédiat, mais un lever
+        // futur (jusqu'à 30 jours) a pu être trouvé (déclinaison de la
+        // Lune/des planètes qui évolue). On affiche un compte à rebours
+        // plutôt qu'un message statique, y compris hors plage horaire.
+        if (o.rise_iso) {
+          whenLine = `<span class="lib-row-when lib-row-when-special">Sous ${getMinAlt()}° ici pour l\u2019instant</span>`;
+          countdownHtml = `
+            <span class="lib-row-countdown lib-row-countdown-far" data-rise="${o.rise_iso}">
+              <span class="lib-row-countdown-label">Se lève dans</span>
+              <span class="lib-row-countdown-value">--</span>
+            </span>`;
+        } else {
+          whenLine = `<span class="lib-row-when lib-row-when-special">Sous ${getMinAlt()}° ici</span>`;
+          countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">—</span>`;
+        }
       } else if (o.rise_iso && o.set_iso) {
         whenLine = `<span class="lib-row-when">Lève ${fmtTime(o.rise_iso)} · Couche ${fmtTime(o.set_iso)}</span>`;
         countdownHtml = `
@@ -1209,10 +1236,20 @@
     const now = Date.now();
     document.querySelectorAll('#libList .lib-row-countdown[data-rise]').forEach((el) => {
       const riseT = new Date(el.dataset.rise).getTime();
-      const setT = new Date(el.dataset.set).getTime();
       const labelEl = el.querySelector('.lib-row-countdown-label');
       const valueEl = el.querySelector('.lib-row-countdown-value');
       if (!labelEl || !valueEl) return;
+
+      // Lever lointain (objet actuellement sous l'altitude minimale) :
+      // pas de coucher connu, on affiche toujours "Se lève dans", même
+      // hors plage horaire, au format 1j4h5m.
+      if (el.classList.contains('lib-row-countdown-far')) {
+        labelEl.textContent = 'Se lève dans';
+        valueEl.textContent = formatCountdownDHM(Math.max(riseT - now, 0));
+        return;
+      }
+
+      const setT = new Date(el.dataset.set).getTime();
       let diffMs;
       if (now < riseT) { labelEl.textContent = 'Se lève dans'; diffMs = riseT - now; }
       else if (now <= setT) { labelEl.textContent = 'Se couche dans'; diffMs = setT - now; }

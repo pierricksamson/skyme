@@ -132,13 +132,45 @@ def find_visibility_window(alt_deg, min_alt=10.0):
     return int(first), int(last), touches_start, touches_end
 
 
+def find_next_rise_far(coord_factory, location, t_ref, min_alt=10.0,
+                        max_days=30, step_minutes=20):
+    """Pour un objet qui ne dépasse pas `min_alt` sur la fenêtre courte de
+    `find_rise_set_event` (quelques heures), élargit la recherche jusqu'à
+    `max_days` jours en avant. Utile pour la Lune et les planètes, dont la
+    déclinaison évolue au fil des jours/semaines et qui peuvent donc finir
+    par franchir `min_alt` même si ce n'est pas le cas dans l'immédiat.
+    Renvoie l'instant (Time) du prochain lever, ou None si aucun lever
+    n'est trouvé dans la fenêtre (objet réellement toujours sous le seuil,
+    typiquement une étoile fixe trop proche du pôle opposé)."""
+    minutes = np.arange(0, max_days * 24 * 60, step_minutes)
+    times = t_ref + minutes * u.minute
+    frame = AltAz(obstime=times, location=location)
+    coord = coord_factory(times, location)
+    alt_deg = coord.transform_to(frame).alt.deg
+    above = alt_deg > min_alt
+
+    if not np.any(above):
+        return None
+    idx = int(np.argmax(above))  # premier True
+    if idx == 0:
+        return times[0]
+    return _interp_time(times[idx - 1], times[idx], alt_deg[idx - 1], alt_deg[idx], min_alt)
+
+
 def find_rise_set_event(coord_factory, location, t_ref, min_alt=10.0,
-                         back_hours=15, fwd_hours=48, step_minutes=5):
+                         back_hours=15, fwd_hours=48, step_minutes=5,
+                         extended_days=None, extended_step_minutes=20):
     """Locate the *real* rise/set pair for an object, unlimited by any
     display window: the crossing-above/crossing-below of `min_alt` that
     encloses `t_ref` (if the object is up right then) or the next upcoming
     one otherwise. Handles circumpolar objects (always above min_alt) and
-    objects that never reach min_alt from this location."""
+    objects that never reach min_alt from this location.
+
+    Si `extended_days` est fourni et que l'objet ne dépasse `min_alt` sur
+    aucun point de la fenêtre courte, une recherche élargie (jusqu'à
+    `extended_days` jours) est tentée : si un lever futur est trouvé, il
+    est renvoyé dans "rise_iso" ("never_visible" reste à True, pour
+    indiquer qu'il n'y a pas de fenêtre lever/coucher "immédiate")."""
     minutes = np.arange(-back_hours * 60, fwd_hours * 60, step_minutes)
     times = t_ref + minutes * u.minute
     frame = AltAz(obstime=times, location=location)
@@ -150,8 +182,16 @@ def find_rise_set_event(coord_factory, location, t_ref, min_alt=10.0,
         return {"rise_iso": None, "set_iso": None,
                 "always_visible": True, "never_visible": False, "up_now": True}
     if not np.any(above):
-        return {"rise_iso": None, "set_iso": None,
-                "always_visible": False, "never_visible": True, "up_now": False}
+        far_rise = None
+        if extended_days:
+            far_rise = find_next_rise_far(
+                coord_factory, location, t_ref, min_alt,
+                max_days=extended_days, step_minutes=extended_step_minutes)
+        return {
+            "rise_iso": (far_rise.utc.isot + "Z") if far_rise is not None else None,
+            "set_iso": None,
+            "always_visible": False, "never_visible": True, "up_now": False,
+        }
 
     idx_now = int(np.argmin(np.abs(minutes)))
     up_now = bool(above[idx_now])
@@ -502,7 +542,8 @@ def catalog_list():
         factory = item.pop("_factory")
         item["favorite"] = item["name"] in favorites
         if location is not None:
-            event = find_rise_set_event(factory, location, Time(now_utc), min_alt=min_alt)
+            event = find_rise_set_event(factory, location, Time(now_utc), min_alt=min_alt,
+                                         extended_days=30)
             item["rise_iso"] = event["rise_iso"]
             item["set_iso"] = event["set_iso"]
             item["always_visible"] = event["always_visible"]
