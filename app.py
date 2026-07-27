@@ -6,7 +6,7 @@ from functools import wraps
 from threading import Lock
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import numpy as np
 
 warnings.filterwarnings("ignore", category=UserWarning, module="astropy")
@@ -654,6 +654,121 @@ def favorites_toggle():
         return jsonify({"error": "name required"}), 400
     is_favorite = toggle_favorite(request.user["id"], name)
     return jsonify({"name": name, "favorite": is_favorite})
+
+
+@app.route("/api/agenda/favorites-count")
+@login_required
+def agenda_favorites_count():
+    """Pour une plage de dates, renvoie combien d'objets favoris sont
+    visibles chaque nuit (compte tenu de la plage horaire choisie et de la
+    hauteur minimale), afin d'afficher une bulle '★ N' sur les jours
+    concernés dans l'agenda."""
+    try:
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "lat/lon required"}), 400
+
+    elev = float(request.args.get("elev", 0) or 0)
+
+    try:
+        min_alt = float(request.args.get("min_alt", 10.0))
+    except (TypeError, ValueError):
+        min_alt = 10.0
+
+    mode = request.args.get("mode", "margin")
+    try:
+        margin = float(request.args.get("margin", 30))
+    except (TypeError, ValueError):
+        margin = 30
+
+    def parse_hm(value, default_h, default_m):
+        try:
+            h, m = (value or "").split(":")
+            return int(h), int(m)
+        except (ValueError, AttributeError):
+            return default_h, default_m
+
+    start_h, start_m = parse_hm(request.args.get("fixed_start_hm"), 20, 0)
+    end_h, end_m = parse_hm(request.args.get("fixed_end_hm"), 6, 0)
+
+    try:
+        start_date = datetime.strptime(request.args["start_date"], "%Y-%m-%d")
+        end_date = datetime.strptime(request.args["end_date"], "%Y-%m-%d")
+    except (KeyError, ValueError):
+        return jsonify({"error": "start_date/end_date required (YYYY-MM-DD)"}), 400
+
+    # Garde-fou : on ne calcule jamais plus de 60 jours d'un coup.
+    if (end_date - start_date).days > 60 or end_date < start_date:
+        return jsonify({"error": "invalid date range"}), 400
+
+    favorite_set = set(get_favorites(request.user["id"]))
+    if not favorite_set:
+        return jsonify({"counts": {}})
+
+    location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
+
+    fav_stars = [s for s in STARS if s[0] in favorite_set]
+    fav_deep_sky = [d for d in DEEP_SKY if d[0] in favorite_set]
+    fav_planets = [p for p in PLANET_BODY_NAME.items() if p[0] in favorite_set]
+    want_moon = "Moon" in favorite_set
+
+    counts = {}
+    day = start_date
+    while day <= end_date:
+        date_str = day.strftime("%Y-%m-%d")
+        now_utc = day.replace(tzinfo=timezone.utc)
+        sunset_t, sunrise_t = find_night_window(location, now_utc)
+
+        if mode == "fixed":
+            t_start = Time(day.replace(hour=start_h, minute=start_m, tzinfo=timezone.utc))
+            t_end = Time(day.replace(hour=end_h, minute=end_m, tzinfo=timezone.utc))
+            if t_end <= t_start:
+                t_end = t_end + 1 * u.day
+        else:
+            t_start = sunset_t - margin * u.minute
+            t_end = sunrise_t + margin * u.minute
+            if t_start >= t_end:
+                t_start, t_end = sunset_t, sunrise_t
+
+        t_list = build_time_array(t_start, t_end)
+        frame_list = AltAz(obstime=t_list, location=location)
+
+        count = 0
+
+        if want_moon:
+            moon_factory = lambda times, loc: get_body("moon", times, loc)
+            if compute_object(moon_factory, "Moon", "moon", None, t_start, t_end,
+                               t_list, frame_list, location, is_moon=True,
+                               min_alt=min_alt) is not None:
+                count += 1
+
+        for pname, body_key in fav_planets:
+            factory = (lambda times, loc, bk=body_key: get_body(bk, times, loc))
+            if compute_object(factory, pname, "planet", PLANET_MAG[pname], t_start, t_end,
+                               t_list, frame_list, location, min_alt=min_alt) is not None:
+                count += 1
+
+        for name, ra, dec, mag in fav_stars:
+            fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+            factory = (lambda times, loc, c=fixed_coord: c)
+            if compute_object(factory, name, "star", mag, t_start, t_end,
+                               t_list, frame_list, location, min_alt=min_alt) is not None:
+                count += 1
+
+        for name, ra, dec, mag, kind in fav_deep_sky:
+            fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+            factory = (lambda times, loc, c=fixed_coord: c)
+            if compute_object(factory, name, kind, mag, t_start, t_end,
+                               t_list, frame_list, location, min_alt=min_alt) is not None:
+                count += 1
+
+        if count > 0:
+            counts[date_str] = count
+
+        day = day + timedelta(days=1)
+
+    return jsonify({"counts": counts})
 
 
 @app.route("/api/catalog/stats")

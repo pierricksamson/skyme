@@ -92,6 +92,7 @@
   const agendaLastDay = new Date(today0);
   agendaLastDay.setDate(agendaLastDay.getDate() + AGENDA_DAYS - 1);
   let agendaViewMonth = new Date(today0.getFullYear(), today0.getMonth(), 1);
+  let agendaFavCounts = {}; // { 'YYYY-MM-DD': nombre d'objets favoris visibles ce soir-là }
 
   function getObsMode() {
     return settingsCache.pref_mode || 'margin';
@@ -341,38 +342,42 @@
     });
   }
 
+  function buildSkyUrl(lat, lon, elev, dateStr) {
+    const mode = getObsMode();
+    const margin = getObsMargin();
+
+    // Construction des dates exactes dans le fuseau local si on est en mode 'fixed'
+    let dateToUse = new Date();
+    if (dateStr) {
+      const parts = dateStr.split('-');
+      dateToUse = new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+
+    let startFixed = new Date(dateToUse);
+    const startStr = getFixedStart().split(':');
+    startFixed.setHours(parseInt(startStr[0], 10), parseInt(startStr[1], 10), 0, 0);
+
+    let endFixed = new Date(dateToUse);
+    const endStr = getFixedEnd().split(':');
+    endFixed.setHours(parseInt(endStr[0], 10), parseInt(endStr[1], 10), 0, 0);
+
+    // Si l'heure de fin est inférieure ou égale à l'heure de début (ex: 20h -> 6h),
+    // on comprend que la fin se trouve le jour suivant.
+    if (endFixed <= startFixed) {
+      endFixed.setDate(endFixed.getDate() + 1);
+    }
+
+    const minAlt = getMinAlt();
+
+    let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}&min_alt=${minAlt}`; // NOUVEAU (ajout de &min_alt)
+    url += `&fixed_start=${startFixed.toISOString()}&fixed_end=${endFixed.toISOString()}`;
+    if (dateStr) url += `&date=${dateStr}`;
+    return url;
+  }
+
   async function fetchSky(lat, lon, elev, dateStr) {
     try {
-      const mode = getObsMode();
-      const margin = getObsMargin();
-
-      // Construction des dates exactes dans le fuseau local si on est en mode 'fixed'
-      let dateToUse = new Date();
-      if (dateStr) {
-        const parts = dateStr.split('-');
-        dateToUse = new Date(parts[0], parts[1] - 1, parts[2]);
-      }
-      
-      let startFixed = new Date(dateToUse);
-      const startStr = getFixedStart().split(':');
-      startFixed.setHours(parseInt(startStr[0], 10), parseInt(startStr[1], 10), 0, 0);
-      
-      let endFixed = new Date(dateToUse);
-      const endStr = getFixedEnd().split(':');
-      endFixed.setHours(parseInt(endStr[0], 10), parseInt(endStr[1], 10), 0, 0);
-
-      // Si l'heure de fin est inférieure ou égale à l'heure de début (ex: 20h -> 6h), 
-      // on comprend que la fin se trouve le jour suivant.
-      if (endFixed <= startFixed) {
-        endFixed.setDate(endFixed.getDate() + 1);
-      }
-
-      const minAlt = getMinAlt();
-
-      let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}&min_alt=${minAlt}`; // NOUVEAU (ajout de &min_alt)
-      url += `&fixed_start=${startFixed.toISOString()}&fixed_end=${endFixed.toISOString()}`;
-      if (dateStr) url += `&date=${dateStr}`;
-      
+      const url = buildSkyUrl(lat, lon, elev, dateStr);
       const res = await fetch(url);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -407,6 +412,7 @@
     renderLegend(data);
     renderSchedule(data);
     renderAgendaCalendar();
+    loadAgendaFavCounts();
     renderLibraryStats();
 
     if (nowLineTimer) clearInterval(nowLineTimer);
@@ -900,7 +906,12 @@
       if (inRange) cell.classList.add('cal-day-selectable');
       else cell.disabled = true;
 
-      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${inRange ? '<span class="cal-day-dot"></span>' : ''}`;
+      const favCount = agendaFavCounts[dateStr] || 0;
+      const favBadge = favCount > 0
+        ? `<span class="cal-day-fav"><i class='bx bxs-star'></i>${favCount}</span>`
+        : '';
+
+      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${inRange ? '<span class="cal-day-dot"></span>' : ''}`;
       if (inRange) cell.addEventListener('click', () => openAgendaDay(dateStr, d));
       grid.appendChild(cell);
     }
@@ -919,14 +930,96 @@
     renderAgendaCalendar();
   });
 
+  let agendaPreviewDate = null; // { dateStr, dateObj } en attente de confirmation "Ouvrir"
+
   function openAgendaDay(dateStr, dateObj) {
     if (currentLat === null || currentLon === null) return;
+    agendaPreviewDate = { dateStr, dateObj };
+    showAgendaDayPreview(dateStr, dateObj);
+  }
+
+  async function showAgendaDayPreview(dateStr, dateObj) {
+    const overlay = document.getElementById('agendaDayOverlay');
+    const listEl = document.getElementById('agendaDayFavList');
+    const titleEl = document.getElementById('agendaDayTitle');
+
+    titleEl.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
+    overlay.classList.remove('hidden');
+
+    try {
+      const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      // On ignore la réponse si l'utilisateur a rouvert un autre jour entre-temps.
+      if (!agendaPreviewDate || agendaPreviewDate.dateStr !== dateStr) return;
+
+      const favs = (data.objects || []).filter((o) => o.favorite);
+      if (favs.length === 0) {
+        listEl.innerHTML = '<div class="lib-empty">Aucun favori visible cette nuit-là.</div>';
+      } else {
+        listEl.innerHTML = favs.map((o) => `
+          <div class="agenda-fav-row">
+            <span class="agenda-fav-dot" style="background:${o.color}"></span>
+            <span class="agenda-fav-name">${o.name}</span>
+            <span class="agenda-fav-time">${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}</span>
+          </div>
+        `).join('');
+      }
+    } catch (e) {
+      if (agendaPreviewDate && agendaPreviewDate.dateStr === dateStr) {
+        listEl.innerHTML = '<div class="lib-empty">Impossible de charger les favoris.</div>';
+      }
+    }
+  }
+
+  function closeAgendaDayPreview() {
+    document.getElementById('agendaDayOverlay').classList.add('hidden');
+    agendaPreviewDate = null;
+  }
+
+  document.getElementById('agendaDayClose').addEventListener('click', closeAgendaDayPreview);
+  document.getElementById('agendaDayOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'agendaDayOverlay') closeAgendaDayPreview();
+  });
+
+  document.getElementById('agendaDayOpenBtn').addEventListener('click', () => {
+    if (!agendaPreviewDate) return;
+    const { dateStr, dateObj } = agendaPreviewDate;
+    closeAgendaDayPreview();
+
     errorPanel.classList.add('hidden');
     mainContent.classList.add('hidden');
     bottomNav.classList.add('hidden');
     statusPanel.classList.remove('hidden');
     setStatus(`Calculating sky for ${dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })}…`);
     fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
+  });
+  // Récupère, pour toute la plage de l'agenda, le nombre d'objets favoris
+  // visibles chaque nuit (selon la plage horaire + hauteur mini choisies),
+  // pour afficher la bulle "★ N" sur les jours concernés.
+  async function loadAgendaFavCounts() {
+    if (currentLat === null || currentLon === null) return;
+    try {
+      const mode = getObsMode();
+      const margin = getObsMargin();
+      const minAlt = getMinAlt();
+
+      let url = `/api/agenda/favorites-count?lat=${currentLat}&lon=${currentLon}&elev=${currentElev}`;
+      url += `&mode=${mode}&margin=${margin}&min_alt=${minAlt}`;
+      url += `&fixed_start_hm=${encodeURIComponent(getFixedStart())}&fixed_end_hm=${encodeURIComponent(getFixedEnd())}`;
+      url += `&start_date=${toDateStr(today0)}&end_date=${toDateStr(agendaLastDay)}`;
+
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data = await res.json();
+      agendaFavCounts = data.counts || {};
+      renderAgendaCalendar();
+    } catch (e) {
+      // Silencieux : la bulle est un bonus, pas une fonctionnalité bloquante.
+    }
   }
 
   // ---------- Settings: On/off toggles (persistés en base côté serveur) ----------

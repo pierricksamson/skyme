@@ -926,6 +926,26 @@ body.red-filter::after {
   border-radius: 50%;
   background: var(--accent);
 }
+.cal-day-fav {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--accent);
+  color: var(--bg, #1a1712);
+  border-radius: 999px;
+  padding: 1px 5px;
+  font-size: 9px;
+  line-height: 1.5;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.cal-day-fav i {
+  font-size: 9px;
+}
 
 /* ---------- Settings ---------- */
 .settings-card {
@@ -1473,6 +1493,45 @@ body.red-filter::after {
 .info-value {
   font-family: var(--font-mono);
   font-size: 16px;
+  color: var(--accent);
+}
+
+.agenda-fav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+.agenda-fav-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 10px 14px;
+}
+.agenda-fav-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  flex: none;
+  box-shadow: 0 0 8px currentColor;
+}
+.agenda-fav-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agenda-fav-time {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--accent);
 }
 
