@@ -639,7 +639,16 @@
   }
 
   function openInfo(o) {
-    infoObj = o;
+    // Le lever/coucher "vrai" (réel, non limité par la fenêtre d'affichage
+    // marge/plage fixe) prime toujours quand il est disponible. Les objets
+    // renvoyés par /api/sky l'exposent via true_rise_iso/true_set_iso ; les
+    // objets venant seulement de la bibliothèque (/api/catalog/list) ont
+    // déjà des rise_iso/set_iso "vrais" puisqu'ils ne dépendent d'aucune
+    // fenêtre d'affichage.
+    const trueRise = o.true_rise_iso || o.rise_iso || null;
+    const trueSet = o.true_set_iso || o.set_iso || null;
+    infoObj = { ...o, rise_iso: trueRise, set_iso: trueSet };
+
     const color = o.color || CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
     document.getElementById('infoDot').style.background = color;
     document.getElementById('infoDot').style.color = color;
@@ -647,10 +656,25 @@
     document.getElementById('infoCategory').textContent = CATEGORY_LABEL[o.category] || capitalize(o.category);
     updateInfoFavBtn();
 
-    const hasWindow = !!(o.rise_iso && o.set_iso);
-    document.getElementById('infoRise').textContent = hasWindow ? fmtTime(o.rise_iso) : '--:--';
-    document.getElementById('infoSet').textContent = hasWindow ? fmtTime(o.set_iso) : '--:--';
-    document.getElementById('infoDuration').textContent = hasWindow ? fmtDuration(o.duration_min) : '—';
+    const hasWindow = !!(trueRise && trueSet);
+    if (hasWindow) {
+      document.getElementById('infoRise').textContent = fmtTime(trueRise);
+      document.getElementById('infoSet').textContent = fmtTime(trueSet);
+      const durationMin = (new Date(trueSet).getTime() - new Date(trueRise).getTime()) / 60000;
+      document.getElementById('infoDuration').textContent = fmtDuration(durationMin);
+    } else if (o.always_visible) {
+      document.getElementById('infoRise').textContent = 'Toujours';
+      document.getElementById('infoSet').textContent = 'levé';
+      document.getElementById('infoDuration').textContent = '24h+';
+    } else if (o.never_visible) {
+      document.getElementById('infoRise').textContent = '—';
+      document.getElementById('infoSet').textContent = '—';
+      document.getElementById('infoDuration').textContent = '—';
+    } else {
+      document.getElementById('infoRise').textContent = '--:--';
+      document.getElementById('infoSet').textContent = '--:--';
+      document.getElementById('infoDuration').textContent = '—';
+    }
     document.getElementById('infoAlt').textContent =
       (o.peak_altitude !== undefined && o.peak_altitude !== null) ? `${o.peak_altitude}°` : '—';
     document.getElementById('infoMag').textContent = (o.magnitude !== null && o.magnitude !== undefined)
@@ -707,6 +731,8 @@
     }
     if (name === 'library') {
       initLibraryView();
+    } else {
+      stopLibraryCountdownTimer();
     }
     if (name !== 'tools') {
       stopActiveTool();
@@ -1070,20 +1096,33 @@
   };
 
   let catalogList = null;
+  let catalogListKey = null;
   let libActiveCategory = 'all';
   let libSearchTerm = '';
+  let libCountdownTimer = null;
 
   function normalizeSearch(s) {
     return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
   async function fetchCatalogListOnce() {
-    if (catalogList) return catalogList;
+    // Clé de cache : la position et l'altitude minimale influent sur le
+    // lever/coucher réel de chaque objet, donc on refait la requête dès
+    // qu'un de ces paramètres change (nouvelle position, réglage modifié…).
+    const key = isLocationSet()
+      ? `${currentLat.toFixed(4)}|${currentLon.toFixed(4)}|${currentElev}|${getMinAlt()}`
+      : 'no-location';
+    if (catalogList && catalogListKey === key) return catalogList;
     try {
-      const res = await fetch('/api/catalog/list');
+      let url = '/api/catalog/list';
+      if (isLocationSet()) {
+        url += `?lat=${currentLat}&lon=${currentLon}&elev=${currentElev}&min_alt=${getMinAlt()}`;
+      }
+      const res = await fetch(url);
       if (!res.ok) return null;
       const data = await res.json();
       catalogList = data.items;
+      catalogListKey = key;
       return catalogList;
     } catch (e) {
       return null;
@@ -1126,25 +1165,75 @@
       const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
       const nameAttr = o.name.replace(/"/g, '&quot;');
       const fav = isFavorite(o.name);
+
+      let whenLine = '';
+      let countdownHtml = '';
+      if (o.always_visible) {
+        whenLine = `<span class="lib-row-when lib-row-when-special">Toujours au-dessus de ${getMinAlt()}°</span>`;
+        countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">Toujours visible</span>`;
+      } else if (o.never_visible) {
+        whenLine = `<span class="lib-row-when lib-row-when-special">Ne dépasse pas ${getMinAlt()}° ici</span>`;
+        countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">—</span>`;
+      } else if (o.rise_iso && o.set_iso) {
+        whenLine = `<span class="lib-row-when">Lève ${fmtTime(o.rise_iso)} · Couche ${fmtTime(o.set_iso)}</span>`;
+        countdownHtml = `
+          <span class="lib-row-countdown" data-rise="${o.rise_iso}" data-set="${o.set_iso}">
+            <span class="lib-row-countdown-label">—</span>
+            <span class="lib-row-countdown-value">--:--:--</span>
+          </span>`;
+      }
+
       return `
         <div class="lib-row lib-row-clickable" data-name="${nameAttr}">
           <span class="lib-row-dot" style="background:${color}"></span>
           <span class="lib-row-main">
             <span class="lib-row-name">${o.name}</span>
             <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
+            ${whenLine}
           </span>
-          <span class="lib-row-mag">${magStr}</span>
+          <span class="lib-row-side">
+            <span class="lib-row-mag">${magStr}</span>
+            ${countdownHtml}
+          </span>
           <button type="button" class="lib-fav-btn${fav ? ' active' : ''}" data-name="${nameAttr}" title="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">
             <i class='bx ${fav ? 'bxs-star' : 'bx-star'}'></i>
           </button>
         </div>
       `;
     }).join('');
+
+    tickLibraryCountdowns();
+  }
+
+  function tickLibraryCountdowns() {
+    const now = Date.now();
+    document.querySelectorAll('#libList .lib-row-countdown[data-rise]').forEach((el) => {
+      const riseT = new Date(el.dataset.rise).getTime();
+      const setT = new Date(el.dataset.set).getTime();
+      const labelEl = el.querySelector('.lib-row-countdown-label');
+      const valueEl = el.querySelector('.lib-row-countdown-value');
+      if (!labelEl || !valueEl) return;
+      let diffMs;
+      if (now < riseT) { labelEl.textContent = 'Se lève dans'; diffMs = riseT - now; }
+      else if (now <= setT) { labelEl.textContent = 'Se couche dans'; diffMs = setT - now; }
+      else { labelEl.textContent = 'Couché'; diffMs = 0; }
+      valueEl.textContent = formatCountdownMs(diffMs);
+    });
+  }
+
+  function startLibraryCountdownTimer() {
+    if (libCountdownTimer) clearInterval(libCountdownTimer);
+    libCountdownTimer = setInterval(tickLibraryCountdowns, 1000);
+  }
+
+  function stopLibraryCountdownTimer() {
+    if (libCountdownTimer) { clearInterval(libCountdownTimer); libCountdownTimer = null; }
   }
 
   async function initLibraryView() {
     await fetchCatalogListOnce();
     renderLibraryList();
+    startLibraryCountdownTimer();
   }
 
   const libSearchInput = document.getElementById('libSearchInput');

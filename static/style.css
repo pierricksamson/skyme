@@ -619,6 +619,46 @@ body.red-filter::after {
   color: var(--accent);
   flex: none;
 }
+.lib-row-when {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+.lib-row-when-special {
+  color: var(--accent);
+}
+.lib-row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex: none;
+  min-width: 64px;
+}
+.lib-row-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+}
+.lib-row-countdown-label {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.lib-row-countdown-value {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text);
+  font-weight: 500;
+}
+.lib-row-countdown-static {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
 .lib-empty {
   padding: 30px 20px;
   text-align: center;

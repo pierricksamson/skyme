@@ -132,9 +132,76 @@ def find_visibility_window(alt_deg, min_alt=10.0):
     return int(first), int(last), touches_start, touches_end
 
 
-def compute_object(coord, name, category, fixed_mag, t_start, t_end,
+def find_rise_set_event(coord_factory, location, t_ref, min_alt=10.0,
+                         back_hours=15, fwd_hours=48, step_minutes=5):
+    """Locate the *real* rise/set pair for an object, unlimited by any
+    display window: the crossing-above/crossing-below of `min_alt` that
+    encloses `t_ref` (if the object is up right then) or the next upcoming
+    one otherwise. Handles circumpolar objects (always above min_alt) and
+    objects that never reach min_alt from this location."""
+    minutes = np.arange(-back_hours * 60, fwd_hours * 60, step_minutes)
+    times = t_ref + minutes * u.minute
+    frame = AltAz(obstime=times, location=location)
+    coord = coord_factory(times, location)
+    alt_deg = coord.transform_to(frame).alt.deg
+    above = alt_deg > min_alt
+
+    if np.all(above):
+        return {"rise_iso": None, "set_iso": None,
+                "always_visible": True, "never_visible": False, "up_now": True}
+    if not np.any(above):
+        return {"rise_iso": None, "set_iso": None,
+                "always_visible": False, "never_visible": True, "up_now": False}
+
+    idx_now = int(np.argmin(np.abs(minutes)))
+    up_now = bool(above[idx_now])
+
+    n = len(above)
+    islands = []
+    i = 0
+    while i < n:
+        if above[i]:
+            j = i
+            while j + 1 < n and above[j + 1]:
+                j += 1
+            islands.append((i, j))
+            i = j + 1
+        else:
+            i += 1
+
+    chosen = None
+    if up_now:
+        for s, e in islands:
+            if s <= idx_now <= e:
+                chosen = (s, e)
+                break
+    else:
+        for s, e in islands:
+            if s > idx_now:
+                chosen = (s, e)
+                break
+        if chosen is None:
+            chosen = islands[-1]
+    s, e = chosen
+
+    rise_t = times[0] if s == 0 else _interp_time(
+        times[s - 1], times[s], alt_deg[s - 1], alt_deg[s], min_alt)
+    set_t = times[-1] if e == n - 1 else _interp_time(
+        times[e], times[e + 1], alt_deg[e], alt_deg[e + 1], min_alt)
+
+    return {
+        "rise_iso": rise_t.utc.isot + "Z",
+        "set_iso": set_t.utc.isot + "Z",
+        "always_visible": False,
+        "never_visible": False,
+        "up_now": up_now,
+    }
+
+
+def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
                     t_list, frame_list, location, min_alt=10.0, is_moon=False,
                     is_favorite=False):
+    coord = coord_factory(t_list, location)
     altaz = coord.transform_to(frame_list)
     alt_deg = altaz.alt.deg
 
@@ -158,6 +225,11 @@ def compute_object(coord, name, category, fixed_mag, t_start, t_end,
 
     duration_min = (set_t - rise_t).sec / 60.0
 
+    # Vrai lever/coucher, non limité par la fenêtre d'affichage (marge ou
+    # plage fixe) : on prend comme référence le pic d'altitude (l'objet y
+    # est garanti au-dessus du seuil), puis on cherche l'évènement complet.
+    true_event = find_rise_set_event(coord_factory, location, t_list[peak_idx], min_alt)
+
     return {
         "name": name,
         "category": category,
@@ -170,6 +242,10 @@ def compute_object(coord, name, category, fixed_mag, t_start, t_end,
         "touches_start": bool(touches_start),
         "touches_end": bool(touches_end),
         "favorite": bool(is_favorite),
+        "true_rise_iso": true_event["rise_iso"],
+        "true_set_iso": true_event["set_iso"],
+        "always_visible": true_event["always_visible"],
+        "never_visible": true_event["never_visible"],
     }
 
 
@@ -309,32 +385,34 @@ def sky():
 
     objects = []
 
-    moon_coord = get_body("moon", t_list, location)
-    obj = compute_object(moon_coord, "Moon", "moon", None, t_start, t_end,
+    moon_factory = lambda times, loc: get_body("moon", times, loc)
+    obj = compute_object(moon_factory, "Moon", "moon", None, t_start, t_end,
                           t_list, frame_list, location, is_moon=True, min_alt=min_alt,
                           is_favorite=("Moon" in favorites))
     if obj:
         objects.append(obj)
 
     for pname, body_key in PLANET_BODY_NAME.items():
-        coord = get_body(body_key, t_list, location)
-        obj = compute_object(coord, pname, "planet", PLANET_MAG[pname], t_start, t_end,
+        factory = (lambda times, loc, bk=body_key: get_body(bk, times, loc))
+        obj = compute_object(factory, pname, "planet", PLANET_MAG[pname], t_start, t_end,
                               t_list, frame_list, location, min_alt=min_alt,
                               is_favorite=(pname in favorites))
         if obj:
             objects.append(obj)
 
     for name, ra, dec, mag in STARS:
-        coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-        obj = compute_object(coord, name, "star", mag, t_start, t_end,
+        fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+        factory = (lambda times, loc, c=fixed_coord: c)
+        obj = compute_object(factory, name, "star", mag, t_start, t_end,
                               t_list, frame_list, location, min_alt=min_alt,
                               is_favorite=(name in favorites))
         if obj:
             objects.append(obj)
 
     for name, ra, dec, mag, kind in DEEP_SKY:
-        coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-        obj = compute_object(coord, name, kind, mag, t_start, t_end,
+        fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+        factory = (lambda times, loc, c=fixed_coord: c)
+        obj = compute_object(factory, name, kind, mag, t_start, t_end,
                               t_list, frame_list, location, min_alt=min_alt,
                               is_favorite=(name in favorites))
         if obj:
@@ -365,37 +443,71 @@ def catalog_list():
         "magnitude": None,
         "ra": None,
         "dec": None,
+        "_factory": (lambda times, loc: get_body("moon", times, loc)),
     }]
 
-    for pname in PLANET_MAG:
+    for pname, body_key in PLANET_BODY_NAME.items():
         items.append({
             "name": pname,
             "category": "planet",
             "magnitude": PLANET_MAG[pname],
             "ra": None,
             "dec": None,
+            "_factory": (lambda times, loc, bk=body_key: get_body(bk, times, loc)),
         })
 
     for name, ra, dec, mag in STARS:
+        fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         items.append({
             "name": name,
             "category": "star",
             "magnitude": mag,
             "ra": round(ra, 4),
             "dec": round(dec, 4),
+            "_factory": (lambda times, loc, c=fixed_coord: c),
         })
 
     for name, ra, dec, mag, kind in DEEP_SKY:
+        fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         items.append({
             "name": name,
             "category": kind,
             "magnitude": mag,
             "ra": round(ra, 4),
             "dec": round(dec, 4),
+            "_factory": (lambda times, loc, c=fixed_coord: c),
         })
 
+    # Lever/coucher réel (non limité par une fenêtre d'affichage), calculé
+    # uniquement si une position est fournie : avec les paramètres actuels
+    # (position, altitude minimale), pour savoir quand un objet se lève et
+    # se couche même s'il n'apparaît pas dans le ciel du moment.
+    location = None
+    try:
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
+        elev = float(request.args.get("elev", 0) or 0)
+        location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
+    except (KeyError, ValueError, TypeError):
+        location = None
+
+    try:
+        min_alt = float(request.args.get("min_alt", 10.0))
+    except (TypeError, ValueError):
+        min_alt = 10.0
+
+    now_utc = datetime.now(timezone.utc)
+
     for item in items:
+        factory = item.pop("_factory")
         item["favorite"] = item["name"] in favorites
+        if location is not None:
+            event = find_rise_set_event(factory, location, Time(now_utc), min_alt=min_alt)
+            item["rise_iso"] = event["rise_iso"]
+            item["set_iso"] = event["set_iso"]
+            item["always_visible"] = event["always_visible"]
+            item["never_visible"] = event["never_visible"]
+            item["up_now"] = event["up_now"]
 
     items.sort(key=lambda o: o["name"])
     return jsonify({"items": items})
