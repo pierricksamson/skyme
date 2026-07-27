@@ -1302,7 +1302,16 @@
       if (!row || !row.dataset.name) return;
       const catalogItem = catalogList && catalogList.find((o) => o.name === row.dataset.name);
       if (!catalogItem) return;
-      const liveMatch = currentData && currentData.objects
+      // Les objets de currentData (timeline) portent un true_rise_iso/
+      // true_set_iso calculé par rapport à la nuit affichée, qui peut être
+      // une nuit future (navigation dans l'agenda) différente d'aujourd'hui.
+      // Le catalogue, lui, est toujours calculé par rapport à l'heure
+      // réelle actuelle : on ne préfère donc le timeline que s'il concerne
+      // bien le jour courant, sinon le catalogue reste la seule source
+      // fiable pour le lever/coucher affiché dans la fiche objet.
+      const isTodayData = currentData
+        && (!currentData.requested_date || currentData.requested_date === toDateStr(new Date()));
+      const liveMatch = (isTodayData && currentData.objects)
         ? currentData.objects.find((obj) => obj.name === catalogItem.name)
         : null;
       openInfo(liveMatch || catalogItem);
