@@ -156,18 +156,21 @@
           <div class="calendar-weekdays" id="agendaWeekdays"></div>
           <div class="calendar-grid" id="agendaGrid"></div>
         </div>
-      <div class="info-sheet">
-        <div class="info-sheet-handle"></div>
-        <div class="info-header">
-          <div><h3 id="agendaDayTitle" style="margin:0;">—</h3></div>
-          <button id="agendaDayClose" class="info-close">✕</button>
+
+        <div id="agendaDayPanel" class="agenda-day-panel">
+          <div class="agenda-day-panel-header">
+            <h3 id="agendaDayTitle" class="agenda-day-panel-title">Sélectionne une nuit</h3>
+            <button id="agendaDayClose" class="info-close hidden">✕</button>
+          </div>
+          <div id="agendaDayFavList" class="agenda-day-panel-body">
+            <div class="locked-state">
+              <p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p>
+            </div>
+          </div>
+          <button id="agendaDayOpenBtn" class="login-btn hidden" style="width:100%; margin-top:14px; flex:none;">
+            <i class='bx bx-telescope'></i> Ouvrir cette nuit
+          </button>
         </div>
-        <div id="agendaDayFavList" class="agenda-fav-list"></div>
-        <button id="agendaDayOpenBtn" class="login-btn" style="width:100%; margin-top:14px;">
-          <i class='bx bx-telescope'></i> Ouvrir cette nuit
-        </button>
-      </div>
-    </div>
       </section>
 
       <section id="view-tools" class="view hidden">

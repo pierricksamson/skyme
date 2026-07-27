@@ -1558,3 +1558,47 @@ body.red-filter::after {
   background: var(--bg-elevated) !important;
   font-family: var(--font-body) !important;
 }
+
+.agenda-day-panel {
+  margin-top: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 180px;
+}
+.agenda-day-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.agenda-day-panel-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text);
+}
+.agenda-day-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agenda-day-panel-body .agenda-fav-list {
+  max-height: none;
+}
+.agenda-day-panel-body .locked-state {
+  flex: 1;
+  padding: 20px 10px;
+}
+.cal-day-selected {
+  border-color: var(--accent) !important;
+  background: var(--accent-soft) !important;
+}

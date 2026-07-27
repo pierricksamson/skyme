@@ -612,6 +612,10 @@
     }, 150);
   });
 
+  // Recalcule aussi la hauteur du panneau agenda (jour sélectionné) au
+  // redimensionnement / rotation d'écran.
+  window.addEventListener('resize', () => requestAnimationFrame(sizeAgendaDayPanel));
+
   let pinchStartDist = null;
   let pinchStartZoom = 1;
   const tlWrapEl_forPinch = () => document.getElementById('tlWrap');
@@ -850,6 +854,8 @@
       initLibraryView();
     } else if (name === 'overview') {
       renderOverviewFavorites();
+    } else if (name === 'agenda') {
+      requestAnimationFrame(sizeAgendaDayPanel);
     }
     if (name !== 'tools') {
       stopActiveTool();
@@ -905,6 +911,7 @@
       if (isToday) cell.classList.add('cal-day-today');
       if (inRange) cell.classList.add('cal-day-selectable');
       else cell.disabled = true;
+      if (agendaPreviewDate && agendaPreviewDate.dateStr === dateStr) cell.classList.add('cal-day-selected');
 
       const favCount = agendaFavCounts[dateStr] || 0;
       const favBadge = favCount > 0
@@ -930,22 +937,41 @@
     renderAgendaCalendar();
   });
 
-  let agendaPreviewDate = null; // { dateStr, dateObj } en attente de confirmation "Ouvrir"
+  // ---------- Agenda : panneau intégré (plus de popup) ----------
+  // agendaPreviewDate garde en mémoire le jour actuellement affiché dans
+  // le panneau ("agendaDayPanel"), qui vit directement sous le calendrier
+  // et remplit l'espace jusqu'à la bottom nav (voir sizeAgendaDayPanel).
+  let agendaPreviewDate = null; // { dateStr, dateObj }
+
+  function sizeAgendaDayPanel() {
+    const panel = document.getElementById('agendaDayPanel');
+    const view = document.getElementById('view-agenda');
+    if (!panel || !view || view.classList.contains('hidden')) return;
+    const navH = bottomNav ? bottomNav.offsetHeight : 0;
+    const top = panel.getBoundingClientRect().top;
+    const buffer = 20;
+    const available = Math.max(window.innerHeight - top - navH - buffer, 160);
+    panel.style.height = `${available}px`;
+  }
 
   function openAgendaDay(dateStr, dateObj) {
     if (currentLat === null || currentLon === null) return;
     agendaPreviewDate = { dateStr, dateObj };
+    renderAgendaCalendar(); // pour surligner le jour sélectionné
     showAgendaDayPreview(dateStr, dateObj);
+    requestAnimationFrame(sizeAgendaDayPanel);
   }
 
   async function showAgendaDayPreview(dateStr, dateObj) {
-    const overlay = document.getElementById('agendaDayOverlay');
     const listEl = document.getElementById('agendaDayFavList');
     const titleEl = document.getElementById('agendaDayTitle');
+    const closeBtn = document.getElementById('agendaDayClose');
+    const openBtn = document.getElementById('agendaDayOpenBtn');
 
     titleEl.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    closeBtn.classList.remove('hidden');
+    openBtn.classList.remove('hidden');
     listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
-    overlay.classList.remove('hidden');
 
     try {
       const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
@@ -976,14 +1002,16 @@
   }
 
   function closeAgendaDayPreview() {
-    document.getElementById('agendaDayOverlay').classList.add('hidden');
     agendaPreviewDate = null;
+    document.getElementById('agendaDayTitle').textContent = 'Sélectionne une nuit';
+    document.getElementById('agendaDayClose').classList.add('hidden');
+    document.getElementById('agendaDayOpenBtn').classList.add('hidden');
+    document.getElementById('agendaDayFavList').innerHTML =
+      '<div class="locked-state"><p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p></div>';
+    renderAgendaCalendar();
   }
 
   document.getElementById('agendaDayClose').addEventListener('click', closeAgendaDayPreview);
-  document.getElementById('agendaDayOverlay').addEventListener('click', (e) => {
-    if (e.target.id === 'agendaDayOverlay') closeAgendaDayPreview();
-  });
 
   document.getElementById('agendaDayOpenBtn').addEventListener('click', () => {
     if (!agendaPreviewDate) return;
@@ -997,6 +1025,7 @@
     setStatus(`Calculating sky for ${dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })}…`);
     fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
   });
+
   // Récupère, pour toute la plage de l'agenda, le nombre d'objets favoris
   // visibles chaque nuit (selon la plage horaire + hauteur mini choisies),
   // pour afficher la bulle "★ N" sur les jours concernés.
