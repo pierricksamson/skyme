@@ -2526,6 +2526,7 @@ function assignLanesClient(objects) {
     startLibraryCountdownTimer();
   }
   initApp();
+  resetZoomToFit()
 })();
 
 function loadingBlockHtml(msg, abs = false) {
