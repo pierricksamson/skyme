@@ -510,7 +510,7 @@
     return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
   }
 
-  function renderTimeline(data) {
+  function renderTimeline(data, recomputeZoom = true) {
     const hours = document.getElementById('tlHours');
     const lanesScroll = document.getElementById('tlLanesScroll');
     const lanes = document.getElementById('tlLanes');
@@ -518,7 +518,12 @@
     hours.innerHTML = '';
     lanes.innerHTML = '';
 
-    if (zoomMode === 'auto') {
+    // On ne recalcule le zoom "fit" que sur les actions qui doivent
+    // vraiment le déclencher (chargement, resize, bouton fit...), pas sur
+    // un simple changement de filtre : sinon, ouvrir/fermer le panneau de
+    // filtre (qui déplace tlWrap) ou taper une magnitude faisait "sauter"
+    // le zoom à chaque frappe/clic.
+    if (zoomMode === 'auto' && recomputeZoom) {
       zoomLevel = computeFitZoom(data);
     }
     updateZoomFitButton();
@@ -1005,7 +1010,7 @@
     magClearId: 'tlFilterMagClear',
     countId: 'tlFilterCount',
     filterState: tlFilterState,
-    onChange: () => { if (currentData) renderTimeline(currentData); },
+    onChange: () => { if (currentData) renderTimeline(currentData, false); },
   });
 
   wireFilterPanel({
@@ -1016,7 +1021,7 @@
     magClearId: 'agendaFilterMagClear',
     countId: 'agendaFilterCount',
     filterState: agendaFilterState,
-    onChange: () => { if (agendaTtData) renderAgendaTimeline(agendaTtData); },
+    onChange: () => { if (agendaTtData) renderAgendaTimeline(agendaTtData, false); },
   });
 
   function toDateStr(d) {
@@ -1246,7 +1251,7 @@
     return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
   }
 
-  function renderAgendaTimeline(data) {
+  function renderAgendaTimeline(data, recomputeZoom = true) {
     const hours = document.getElementById('agendaTlHours');
     const lanesScroll = document.getElementById('agendaTlLanesScroll');
     const lanes = document.getElementById('agendaTlLanes');
@@ -1254,7 +1259,9 @@
     hours.innerHTML = '';
     lanes.innerHTML = '';
 
-    if (agendaZoomMode === 'auto') {
+    // Même logique que renderTimeline : pas de recalcul du fit sur un
+    // simple changement de filtre.
+    if (agendaZoomMode === 'auto' && recomputeZoom) {
       agendaZoomLevel = computeAgendaFitZoom(data);
     }
     const fitBtn = document.getElementById('agendaZoomFit');
