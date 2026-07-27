@@ -177,9 +177,25 @@
     value.textContent = formatCountdownMs(diffMs);
   }
 
+  // L'app ne s'ouvre qu'une fois TOUT reçu (réglages, favoris, position,
+  // ciel, bibliothèque, stats). Tant que initialLoadDone est false, aucun
+  // rendu ne doit rendre mainContent/errorPanel visibles : on reste sur
+  // l'écran de chargement avec sa barre de progression.
+  let initialLoadDone = false;
+  let lastSkyError = null;
+
   function setStatus(msg) { statusText.textContent = msg; }
 
+  const progressBarFill = document.getElementById('progressBarFill');
+  const progressPct = document.getElementById('progressPct');
+  function setProgress(pct) {
+    pct = Math.max(0, Math.min(100, Math.round(pct)));
+    if (progressBarFill) progressBarFill.style.width = pct + '%';
+    if (progressPct) progressPct.textContent = pct + '%';
+  }
+
   function showError(msg) {
+    if (!initialLoadDone) { lastSkyError = msg; return; }
     statusPanel.classList.add('hidden');
     mainContent.classList.add('hidden');
     errorPanel.classList.remove('hidden');
@@ -297,6 +313,34 @@
     );
   }
 
+  // Résout la position (GPS ou manuelle) sans toucher au DOM ni déclencher
+  // de calcul : utilisé exclusivement par l'écran de chargement initial,
+  // qui orchestre lui-même chaque étape et sa barre de progression.
+  function getInitialLocation() {
+    return new Promise((resolve) => {
+      const auto = settingsCache.loc_mode !== 'manual';
+
+      if (!auto) {
+        const lat = parseFloat(settingsCache.loc_lat);
+        const lon = parseFloat(settingsCache.loc_lon);
+        if (isNaN(lat) || isNaN(lon)) { resolve(null); return; }
+        resolve({ lat, lon, elev: parseFloat(settingsCache.loc_elev) || 0 });
+        return;
+      }
+
+      if (!navigator.geolocation) { resolve(null); return; }
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const { latitude, longitude, altitude } = pos.coords;
+          resolve({ lat: latitude, lon: longitude, elev: altitude || 0 });
+        },
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 15000 }
+      );
+    });
+  }
+
   async function fetchSky(lat, lon, elev, dateStr) {
     try {
       const mode = getObsMode();
@@ -342,10 +386,12 @@
   }
 
   function render(data) {
-    statusPanel.classList.add('hidden');
-    errorPanel.classList.add('hidden');
-    mainContent.classList.remove('hidden');
-    bottomNav.classList.remove('hidden');
+    if (initialLoadDone) {
+      statusPanel.classList.add('hidden');
+      errorPanel.classList.add('hidden');
+      mainContent.classList.remove('hidden');
+      bottomNav.classList.remove('hidden');
+    }
 
     document.getElementById('sunsetTime').textContent = fmtTime(data.sunset);
     document.getElementById('sunriseTime').textContent = fmtTime(data.sunrise);
@@ -914,53 +960,110 @@
     }
   }
 
-  function savePreferences() {
+  // ---------- Settings: pas de sauvegarde automatique ----------
+  // Tout changement de paramètre ne fait que mettre à jour l'affichage local
+  // (formulaire) et signale des modifications non enregistrées. Rien n'est
+  // envoyé au serveur ni recalculé tant que l'utilisateur n'a pas cliqué sur
+  // "Enregistrer et relancer" : à ce moment-là seulement, tout est envoyé en
+  // une fois puis la page est rechargée (relance complète, aucune surprise).
+  const settingsSaveBar = document.getElementById('settingsSaveBar');
+  const settingsSaveBtn = document.getElementById('settingsSaveBtn');
+  const settingsDiscardBtn = document.getElementById('settingsDiscardBtn');
+
+  function markSettingsDirty() {
+    if (settingsSaveBar) settingsSaveBar.classList.remove('hidden');
+  }
+
+  function clearSettingsDirty() {
+    if (settingsSaveBar) settingsSaveBar.classList.add('hidden');
+  }
+
+  function onPreferencesChanged() {
     const mode = modeFixedRadio.checked ? 'fixed' : 'margin';
-    let margin = parseInt(marginInput.value, 10);
-    if (isNaN(margin) || margin < 0) margin = 0;
-    
-    // Si l'utilisateur efface tout, on fallback sur les valeurs par défaut
-    const startVal = fixedStartInput.value || '20:00';
-    let endVal = fixedEndInput.value || '06:00';
-
-    const updates = {
-      pref_mode: mode,
-      pref_margin: margin,
-      pref_fixed_start: startVal,
-      pref_fixed_end: endVal,
-    };
-
     marginInput.disabled = (mode === 'fixed');
     fixedStartInput.disabled = (mode !== 'fixed');
     fixedEndInput.disabled = (mode !== 'fixed');
-
-    if (minAltInput) {
-      let minAltVal = parseFloat(minAltInput.value);
-      if (isNaN(minAltVal) || minAltVal < 0) minAltVal = 0;
-      if (minAltVal > 90) minAltVal = 90;
-      updates.pref_min_alt = minAltVal;
-    }
-
-    saveSettings(updates);
-
-    if (currentLat !== null && currentLon !== null) {
-      const dateStr = currentData && currentData.requested_date ? currentData.requested_date : undefined;
-      fetchSky(currentLat, currentLon, currentElev, dateStr);
-    }
+    markSettingsDirty();
   }
 
-  modeFixedRadio.addEventListener('change', savePreferences);
-  modeMarginRadio.addEventListener('change', savePreferences);
-  marginInput.addEventListener('change', savePreferences);
-  fixedStartInput.addEventListener('change', savePreferences);
-  fixedEndInput.addEventListener('change', savePreferences);
-  minAltInput.addEventListener('change', savePreferences);
+  modeFixedRadio.addEventListener('change', onPreferencesChanged);
+  modeMarginRadio.addEventListener('change', onPreferencesChanged);
+  marginInput.addEventListener('change', onPreferencesChanged);
+  fixedStartInput.addEventListener('change', onPreferencesChanged);
+  fixedEndInput.addEventListener('change', onPreferencesChanged);
+  minAltInput.addEventListener('change', onPreferencesChanged);
 
   if (redFilterBtn) {
     redFilterBtn.addEventListener('click', () => {
+      // Prévisualisation instantanée uniquement : non persisté tant que
+      // "Enregistrer et relancer" n'est pas cliqué.
       const enabled = !document.body.classList.contains('red-filter');
       applyRedFilter(enabled);
-      saveSettings({ red_filter: enabled });
+      markSettingsDirty();
+    });
+  }
+
+  async function commitSettingsAndReload() {
+    let margin = parseInt(marginInput.value, 10);
+    if (isNaN(margin) || margin < 0) margin = 0;
+    const startVal = fixedStartInput.value || '20:00';
+    const endVal = fixedEndInput.value || '06:00';
+    let minAltVal = parseFloat(minAltInput.value);
+    if (isNaN(minAltVal) || minAltVal < 0) minAltVal = 0;
+    if (minAltVal > 90) minAltVal = 90;
+
+    const updates = {
+      pref_mode: modeFixedRadio.checked ? 'fixed' : 'margin',
+      pref_margin: margin,
+      pref_fixed_start: startVal,
+      pref_fixed_end: endVal,
+      pref_min_alt: minAltVal,
+      red_filter: document.body.classList.contains('red-filter'),
+    };
+
+    const auto = locAutoToggle.checked;
+    updates.loc_mode = auto ? 'auto' : 'manual';
+    if (!auto) {
+      const lat = parseFloat(locLatInput.value);
+      const lon = parseFloat(locLonInput.value);
+      let elev = parseFloat(locElevInput.value);
+      if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lon) || lon < -180 || lon > 180) {
+        locAutoHint.textContent = 'Latitude ou longitude invalide. Corrige avant d\u2019enregistrer.';
+        return;
+      }
+      if (isNaN(elev)) elev = 0;
+      updates.loc_lat = lat;
+      updates.loc_lon = lon;
+      updates.loc_elev = elev;
+    }
+
+    if (settingsSaveBtn) {
+      settingsSaveBtn.disabled = true;
+      settingsSaveBtn.textContent = 'Enregistrement…';
+    }
+
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+    } catch (e) {
+      // best effort : on relance quand même, l'app repartira sur les
+      // dernières valeurs connues côté serveur
+    }
+
+    location.reload();
+  }
+
+  if (settingsSaveBtn) settingsSaveBtn.addEventListener('click', commitSettingsAndReload);
+
+  if (settingsDiscardBtn) {
+    settingsDiscardBtn.addEventListener('click', () => {
+      loadPreferences();
+      loadLocationPreferences();
+      applyRedFilter(!!settingsCache.red_filter);
+      clearSettingsDirty();
     });
   }
 
@@ -1002,9 +1105,8 @@
     locManualBlock.classList.toggle('hidden', auto);
     locAutoHint.textContent = auto
       ? 'L\u2019application utilise la position GPS de l\u2019appareil.'
-      : 'Position définie manuellement ci-dessous.';
-    saveSettings({ loc_mode: auto ? 'auto' : 'manual' });
-    resolveLocation();
+      : 'Position définie manuellement ci-dessous (non enregistrée).';
+    markSettingsDirty();
   });
 
   locSaveBtn.addEventListener('click', () => {
@@ -1016,11 +1118,10 @@
       return;
     }
     if (isNaN(elev)) elev = 0;
-    saveSettings({ loc_mode: 'manual', loc_lat: lat, loc_lon: lon, loc_elev: elev });
     locAutoToggle.checked = false;
     locManualBlock.classList.remove('hidden');
-    locAutoHint.textContent = 'Position définie manuellement ci-dessous.';
-    resolveLocation();
+    locAutoHint.textContent = 'Position définie manuellement ci-dessous (non enregistrée).';
+    markSettingsDirty();
   });
 
   // Carte de sélection : Leaflet + tuiles OpenStreetMap (gratuit, sans clé API).
@@ -1722,12 +1823,57 @@
     polarTimer = setInterval(drawPolarClock, 15000);
   }
 
+  // Écran de chargement : l'app ne s'ouvre qu'une fois TOUT reçu, y compris
+  // la bibliothèque (horaires lever/coucher de chaque objet) et les stats
+  // du catalogue. Chaque étape avance la barre de progression ; une fois
+  // toutes les étapes terminées, on révèle l'app d'un coup — plus aucune
+  // surprise ensuite tant que les réglages ne sont pas explicitement
+  // sauvegardés (voir commitSettingsAndReload).
   async function initApp() {
-    await loadSettingsFromServer();
-    await loadFavorites();
+    const steps = [
+      ['Chargement des réglages…', loadSettingsFromServer],
+      ['Chargement des favoris…', loadFavorites],
+      ['Localisation…', async () => {
+        const loc = await getInitialLocation();
+        if (loc) {
+          currentLat = loc.lat;
+          currentLon = loc.lon;
+          currentElev = loc.elev;
+        } else {
+          currentLat = null;
+          currentLon = null;
+        }
+      }],
+      ['Calcul du ciel…', async () => {
+        if (isLocationSet()) await fetchSky(currentLat, currentLon, currentElev);
+      }],
+      ['Chargement de la bibliothèque…', fetchCatalogListOnce],
+      ['Chargement des statistiques…', fetchCatalogStatsOnce],
+    ];
+
+    for (let i = 0; i < steps.length; i++) {
+      const [label, fn] = steps[i];
+      setStatus(label);
+      try { await fn(); } catch (e) { /* on continue : app offline-friendly */ }
+      setProgress(((i + 1) / steps.length) * 100);
+    }
+
     loadPreferences();
     loadLocationPreferences();
-    resolveLocation();
+    applyRedFilter(!!settingsCache.red_filter);
+
+    if (isLocationSet()) {
+      locLine.textContent = `${currentLat.toFixed(3)}°, ${currentLon.toFixed(3)}°`;
+      if (!currentData) {
+        renderNoLocation(lastSkyError || 'Impossible de calculer le ciel pour le moment.');
+      }
+    } else {
+      renderNoLocation('Aucune position définie. Choisis-la sur la carte ou saisis-la dans Paramètres.');
+    }
+
+    initialLoadDone = true;
+    showAppShell();
+    renderLibraryList();
   }
   initApp();
 })();

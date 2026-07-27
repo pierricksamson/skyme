@@ -223,6 +223,75 @@ body.red-filter::after {
   letter-spacing: 0.03em;
 }
 
+.progress-track {
+  width: 220px;
+  max-width: 70vw;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+.progress-pct {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+}
+
+/* ---------- Settings: barre "Enregistrer et relancer" ---------- */
+.settings-save-bar {
+      padding: 18px;
+    padding-bottom: 50px;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 40px;
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    background: rgba(9, 9, 10, 0.92);
+    backdrop-filter: blur(14px);
+    border-top: 1px solid var(--border);
+    z-index: 10;
+    justify-content: end;
+}
+.settings-save-text {
+  font-size: 13px;
+  color: var(--accent);
+  font-family: var(--font-body);
+}
+.settings-save-actions {
+  display: flex;
+  gap: 10px;
+}
+.settings-discard-btn {
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.settings-save-btn {
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #111;
+  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.settings-save-btn:disabled { opacity: 0.6; }
+
 /* ---------- Views ---------- */
 .view { padding: 4px 18px 24px; }
 .section-heading {

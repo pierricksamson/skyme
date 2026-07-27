@@ -24,7 +24,11 @@
 
     <section id="statusPanel" class="status-panel">
       <div class="spinner"></div>
-      <p id="statusText">Requesting GPS location…</p>
+      <p id="statusText">Chargement…</p>
+      <div class="progress-track">
+        <div id="progressBarFill" class="progress-fill" style="width:0%;"></div>
+      </div>
+      <span id="progressPct" class="progress-pct">0%</span>
     </section>
 
     <section id="errorPanel" class="status-panel hidden">
@@ -353,6 +357,14 @@
         </div>
 
       </section>
+
+      <div id="settingsSaveBar" class="settings-save-bar hidden">
+        <!--<span class="settings-save-text">Modifications non enregistrées</span>-->
+        <div class="settings-save-actions">
+          <button type="button" id="settingsDiscardBtn" class="settings-discard-btn">Annuler</button>
+          <button type="button" id="settingsSaveBtn" class="settings-save-btn">Enregistrer et relancer</button>
+        </div>
+      </div>
 
     </main>
 
