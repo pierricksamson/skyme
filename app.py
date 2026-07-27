@@ -475,7 +475,7 @@ def sky():
     location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
 
     # Calcul du vrai coucher/lever pour l'affichage
-    sunset_t, sunrise_t = find_night_window(location, now_utc)
+    sunset_t, sunrise_t = find_night_window(location, now_utc, min_alt=-1)
 
     mode = request.args.get("mode", "margin")
     if mode == "fixed":

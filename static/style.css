@@ -154,7 +154,6 @@ body.red-filter::after {
 }
 
 .app {
-  border: solid 1px red;
   max-width: 480px;
   margin: 0 auto;
   min-height: 100vh;
@@ -194,14 +193,17 @@ body.red-filter::after {
 
 /* ---------- Status / loading / error ---------- */
 .status-panel {
-  min-height: 70vh;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background-color: var(--bg);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16px;
   text-align: center;
-  padding: 60px 24px;
+  padding: 24px;
   color: var(--text-muted);
 }
 .spinner {
