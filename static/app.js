@@ -67,6 +67,37 @@
     return objects.filter((o) => objectPassesFilter(o, filterState));
   }
 
+  // Réassigne les voies (greedy interval coloring) uniquement sur les objets
+// visibles après filtrage, pour ne pas gâcher l'espace des voies occupées
+// par des objets masqués.
+function assignLanesClient(objects) {
+  const sorted = [...objects].sort(
+    (a, b) => new Date(a.rise_iso) - new Date(b.rise_iso)
+  );
+  const laneEndTimes = [];
+  const laneOf = new Map();
+
+  sorted.forEach((o) => {
+    const rise = new Date(o.rise_iso).getTime();
+    const set = new Date(o.set_iso).getTime();
+    let placed = false;
+    for (let i = 0; i < laneEndTimes.length; i++) {
+      if (rise >= laneEndTimes[i]) {
+        laneOf.set(o, i);
+        laneEndTimes[i] = set;
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      laneOf.set(o, laneEndTimes.length);
+      laneEndTimes.push(set);
+    }
+  });
+
+  return { laneOf, laneCount: laneEndTimes.length };
+}
+
   function wireFilterPanel({ toggleBtnId, panelId, chipSelector, magInputId, magClearId, countId, filterState, onChange }) {
     const toggleBtn = document.getElementById(toggleBtnId);
     const panel = document.getElementById(panelId);
@@ -561,7 +592,11 @@
       hours.appendChild(label);
     }
 
-    const laneCount = Math.max(data.lane_count || 1, 1);
+    const visibleObjects = filterObjects(data.objects, tlFilterState);
+    updateFilterCount('tlFilterCount', data.objects.length, visibleObjects.length);
+
+    const { laneOf, laneCount: computedLaneCount } = assignLanesClient(visibleObjects);
+    const laneCount = Math.max(computedLaneCount, 1);
     const availableWidth = lanesScroll.clientWidth || 300;
     const laneWidth = availableWidth / laneCount;
     const narrow = laneWidth < 64;
@@ -574,10 +609,8 @@
       lanes.appendChild(col);
     }
 
-    const visibleObjects = filterObjects(data.objects, tlFilterState);
-    updateFilterCount('tlFilterCount', data.objects.length, visibleObjects.length);
-
     visibleObjects.forEach((o) => {
+      const lane = laneOf.get(o);
       const rise = new Date(o.rise_iso).getTime();
       const set = new Date(o.set_iso).getTime();
       const topPx = ((rise - start) / 60000) * pxPerMin;
@@ -588,7 +621,7 @@
       block.className = 'block' + (narrow ? ' block-narrow' : '') + (fav ? ' block-favorite' : '');
       block.style.top = `${topPx}px`;
       block.style.height = `${heightPx}px`;
-      block.style.left = `${o.lane * laneWidth + 2}px`;
+      block.style.left = `${lane * laneWidth + 2}px`;
       block.style.width = `${Math.max(laneWidth - 4, 4)}px`;
       block.style.background = o.color;
 
