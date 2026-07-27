@@ -995,11 +995,11 @@
 
   if (redFilterBtn) {
     redFilterBtn.addEventListener('click', () => {
-      // Prévisualisation instantanée uniquement : non persisté tant que
-      // "Enregistrer et relancer" n'est pas cliqué.
+      // Sauvegarde immédiate en base (pas besoin de "Enregistrer et
+      // relancer", pas de reload de l'appli).
       const enabled = !document.body.classList.contains('red-filter');
       applyRedFilter(enabled);
-      markSettingsDirty();
+      saveSettings({ red_filter: enabled });
     });
   }
 

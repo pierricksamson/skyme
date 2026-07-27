@@ -1,6 +1,9 @@
+import json
+import os
 import re
 import warnings
 from functools import wraps
+from threading import Lock
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from datetime import datetime, timezone
@@ -48,10 +51,29 @@ def login_required(view):
 
 
 # ---------- Résumé Wikipedia (image carrée + description) pour la popup info ----------
-# Cache mémoire simple : évite de re-solliciter l'API Wikipedia à chaque
-# ouverture de la popup pour un même objet, pendant la durée de vie du
-# process serveur.
-_WIKI_CACHE = {}
+# Cache persistant sur disque (wiki_cache.json) : évite de re-solliciter
+# l'API Wikipedia à chaque ouverture de la popup pour un même objet, y
+# compris entre deux redémarrages du process serveur (économie d'appels API).
+_WIKI_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wiki_cache.json")
+_WIKI_CACHE_LOCK = Lock()
+
+
+def _load_wiki_cache():
+    try:
+        with open(_WIKI_CACHE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_wiki_cache(cache):
+    tmp_path = _WIKI_CACHE_PATH + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, _WIKI_CACHE_PATH)
+
+
+_WIKI_CACHE = _load_wiki_cache()
 
 
 def _wiki_title(name):
@@ -72,8 +94,9 @@ def fetch_wikipedia_summary(title):
     """Récupère un court résumé Wikipedia (image miniature + description)
     pour un titre de page donné. Retourne toujours un dict avec les clés
     'image' et 'description' (à None si indisponible / hors-ligne)."""
-    if title in _WIKI_CACHE:
-        return _WIKI_CACHE[title]
+    with _WIKI_CACHE_LOCK:
+        if title in _WIKI_CACHE:
+            return _WIKI_CACHE[title]
 
     result = {"image": None, "description": None}
     try:
@@ -92,7 +115,9 @@ def fetch_wikipedia_summary(title):
     except requests.RequestException:
         pass
 
-    _WIKI_CACHE[title] = result
+    with _WIKI_CACHE_LOCK:
+        _WIKI_CACHE[title] = result
+        _save_wiki_cache(_WIKI_CACHE)
     return result
 
 
