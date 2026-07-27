@@ -2030,6 +2030,16 @@
 
     initialLoadDone = true;
     showAppShell();
+
+    // Le zoom "fit" calculé pendant le chargement (DOM encore caché) est
+    // faux : on le recalcule maintenant que mainContent/bottomNav sont
+    // réellement visibles et ont leurs vraies dimensions.
+    if (currentData) {
+      renderTimeline(currentData);
+      positionNowLine(currentData);
+      positionSunLines(currentData);
+    }
+
     renderLibraryList();
     renderOverviewFavorites();
     startLibraryCountdownTimer();
