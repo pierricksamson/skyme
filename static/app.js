@@ -1159,7 +1159,8 @@ function assignLanesClient(objects) {
     titleEl.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     closeBtn.classList.remove('hidden');
     openBtn.classList.remove('hidden');
-    listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
+    // TODO listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
+    listEl.innerHTML = loadingBlockHtml('Chargement des favoris…');
 
     try {
       const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
@@ -1222,6 +1223,7 @@ function assignLanesClient(objects) {
 
   function closeAgendaTimetable() {
     agendaTtDateObj = null;
+    hideAgendaTtLoading();
     document.getElementById('agendaTimetableView').classList.add('hidden');
     document.getElementById('agendaMainView').classList.remove('hidden');
   }
@@ -1231,16 +1233,64 @@ function assignLanesClient(objects) {
   let agendaZoomLevel = 1;
   let agendaResizeTimer = null;
 
+  // Overlay de chargement plein écran pour la timetable agenda : couvre
+  // tout l'espace entre la topbar et la bottom nav (les deux seules zones
+  // qui doivent rester visibles), centré horizontalement et verticalement.
+  function positionAgendaTtLoadingOverlay() {
+    const overlay = document.getElementById('agendaTtLoadingOverlay');
+    if (!overlay) return;
+    const topbar = document.querySelector('.topbar');
+    const topbarH = topbar ? topbar.offsetHeight : 0;
+    const navH = bottomNav ? bottomNav.offsetHeight : 0;
+    overlay.style.top = `${topbarH}px`;
+    overlay.style.bottom = `${navH}px`;
+  }
+
+  function showAgendaTtLoading(msg) {
+    const overlay = document.getElementById('agendaTtLoadingOverlay');
+    const text = document.getElementById('agendaTtLoadingText');
+    if (!overlay) return;
+    if (text && msg) text.textContent = msg;
+    positionAgendaTtLoadingOverlay();
+    overlay.classList.remove('hidden');
+  }
+
+  function hideAgendaTtLoading() {
+    const overlay = document.getElementById('agendaTtLoadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  window.addEventListener('resize', () => {
+    const overlay = document.getElementById('agendaTtLoadingOverlay');
+    if (overlay && !overlay.classList.contains('hidden')) positionAgendaTtLoadingOverlay();
+  });
+
   async function loadAgendaTimetable() {
     if (!agendaTtDateObj) return;
     const dateObj = agendaTtDateObj;
     const dateStr = toDateStr(dateObj);
     const dateLabel = document.getElementById('agendaTtDate');
+    const hours = document.getElementById('agendaTlHours');
+    const wrap = document.getElementById('agendaTlWrap');
     const lanes = document.getElementById('agendaTlLanes');
 
     dateLabel.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     document.getElementById('agendaTtPrev').disabled = dateObj <= today0;
-    lanes.innerHTML = '<div class="lib-empty">Chargement…</div>';
+
+    // Reset complet avant d'afficher le loader : sinon la hauteur, le fond
+    // en grille et les lignes sunset/sunrise/now de la nuit précédente
+    // restent affichés pendant le chargement. Le loader plein écran (overlay
+    // fixe, centré, entre topbar et bottom nav) masque tout le reste de la
+    // vue (header de date, filtres, timeline) pendant le chargement.
+    hours.innerHTML = '';
+    wrap.style.height = '220px';
+    lanes.style.height = '220px';
+    lanes.style.backgroundImage = 'none';
+    lanes.innerHTML = '';
+    ['agendaSunsetLine', 'agendaSunriseLine', 'agendaNowLine'].forEach((id) => {
+      document.getElementById(id).style.display = 'none';
+    });
+    showAgendaTtLoading('Chargement du programme…');
 
     try {
       const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
@@ -1248,10 +1298,10 @@ function assignLanesClient(objects) {
       if (!res.ok) throw new Error();
       const data = await res.json();
 
-      // Si l'utilisateur a changé de jour entre-temps, on ignore la réponse.
       if (!agendaTtDateObj || toDateStr(agendaTtDateObj) !== dateStr) return;
 
       agendaTtData = data;
+      hideAgendaTtLoading();
       if ((data.objects || []).length === 0) {
         lanes.innerHTML = '<div class="lib-empty">Aucun objet visible cette nuit-là.</div>';
       } else {
@@ -1262,6 +1312,7 @@ function assignLanesClient(objects) {
       }
     } catch (e) {
       if (agendaTtDateObj && toDateStr(agendaTtDateObj) === dateStr) {
+        hideAgendaTtLoading();
         lanes.innerHTML = '<div class="lib-empty">Impossible de charger le programme.</div>';
       }
     }
@@ -2476,3 +2527,7 @@ function assignLanesClient(objects) {
   }
   initApp();
 })();
+
+function loadingBlockHtml(msg, abs = false) {
+  return `<div class="locked-state${abs ? ' locked-state-abs' : ''}"><div class="spinner"></div><p>${msg}</p></div>`;
+}

@@ -1696,3 +1696,30 @@ body.red-filter::after {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- Agenda timetable : overlay de chargement plein écran ---------- */
+/* Couvre tout l'espace entre la topbar et la bottom nav (top/bottom sont
+   positionnés dynamiquement en JS selon leurs hauteurs réelles), centré
+   horizontalement et verticalement, et masque tout ce qu'il y a dessous
+   (header de date, filtres, timeline) pendant le chargement. */
+.agenda-tt-loading {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: var(--bg);
+  z-index: 50;
+  text-align: center;
+  color: var(--text-muted);
+  padding: 24px;
+}
+.agenda-tt-loading p {
+  margin: 0;
+  font-size: 13px;
+}
