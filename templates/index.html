@@ -145,31 +145,52 @@
       </section>
 
       <section id="view-agenda" class="view hidden">
-        <div class="section-heading"><h2>Agenda</h2></div>
-        <p class="agenda-intro">Tap a night to load its sky.</p>
-        <div class="calendar">
-          <div class="calendar-nav">
-            <button id="agendaPrevMonth" class="cal-nav-btn" title="Previous month">‹</button>
-            <span id="agendaMonthLabel" class="cal-month-label">—</span>
-            <button id="agendaNextMonth" class="cal-nav-btn" title="Next month">›</button>
+        <div id="agendaMainView">
+          <div class="section-heading"><h2>Agenda</h2></div>
+          <p class="agenda-intro">Tap a night to load its sky.</p>
+          <div class="calendar">
+            <div class="calendar-nav">
+              <button id="agendaPrevMonth" class="cal-nav-btn" title="Previous month">‹</button>
+              <span id="agendaMonthLabel" class="cal-month-label">—</span>
+              <button id="agendaNextMonth" class="cal-nav-btn" title="Next month">›</button>
+            </div>
+            <div class="calendar-weekdays" id="agendaWeekdays"></div>
+            <div class="calendar-grid" id="agendaGrid"></div>
           </div>
-          <div class="calendar-weekdays" id="agendaWeekdays"></div>
-          <div class="calendar-grid" id="agendaGrid"></div>
+
+          <div id="agendaDayPanel" class="agenda-day-panel">
+            <div class="agenda-day-panel-header">
+              <h3 id="agendaDayTitle" class="agenda-day-panel-title">Sélectionne une nuit</h3>
+              <button id="agendaDayClose" class="info-close hidden">✕</button>
+            </div>
+            <div id="agendaDayFavList" class="agenda-day-panel-body">
+              <div class="locked-state">
+                <p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p>
+              </div>
+            </div>
+            <button id="agendaDayOpenBtn" class="login-btn hidden" style="width:100%; margin-top:14px; flex:none;">
+              <i class='bx bx-telescope'></i> Ouvrir cette nuit
+            </button>
+          </div>
         </div>
 
-        <div id="agendaDayPanel" class="agenda-day-panel">
-          <div class="agenda-day-panel-header">
-            <h3 id="agendaDayTitle" class="agenda-day-panel-title">Sélectionne une nuit</h3>
-            <button id="agendaDayClose" class="info-close hidden">✕</button>
+        <div id="agendaTimetableView" class="agenda-timetable hidden">
+          <div class="agenda-timetable-header">
+            <button id="agendaTtPrev" class="cal-nav-btn" title="Previous day">‹</button>
+            <h3 id="agendaTtDate" class="agenda-day-panel-title">—</h3>
+            <button id="agendaTtNext" class="cal-nav-btn" title="Next day">›</button>
+            <button id="agendaTtClose" class="info-close" title="Fermer">✕</button>
           </div>
-          <div id="agendaDayFavList" class="agenda-day-panel-body">
-            <div class="locked-state">
-              <p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p>
+          <div class="schedule-table">
+            <div class="schedule-row schedule-header">
+              <span>Object</span>
+              <span>Rise</span>
+              <span>Set</span>
+              <span>Duration</span>
+              <span>Alt / Mag</span>
             </div>
+            <div id="agendaTtBody"></div>
           </div>
-          <button id="agendaDayOpenBtn" class="login-btn hidden" style="width:100%; margin-top:14px; flex:none;">
-            <i class='bx bx-telescope'></i> Ouvrir cette nuit
-          </button>
         </div>
       </section>
 
@@ -433,7 +454,9 @@
           <button id="infoClose" class="info-close">✕</button>
         </div>
         <div id="infoWiki" class="info-wiki hidden">
-          <img id="infoWikiImg" class="info-wiki-img" alt="">
+          <button type="button" id="infoWikiImgBtn" class="info-wiki-img-btn" title="Voir sur Wikipedia">
+            <img id="infoWikiImg" class="info-wiki-img" alt="">
+          </button>
           <p id="infoWikiDesc" class="info-wiki-desc"></p>
         </div>
         <div class="info-cell info-cell-wide" id="infoCountdownCell">
@@ -466,6 +489,20 @@
     </div>
 
     
+
+    <div id="wikiDetailOverlay" class="info-overlay hidden">
+      <div class="info-sheet">
+        <div class="info-sheet-handle"></div>
+        <div class="info-header">
+          <div><h3 id="wikiDetailTitle" style="margin:0;">—</h3></div>
+          <button id="wikiDetailClose" class="info-close">✕</button>
+        </div>
+        <img id="wikiDetailImg" class="wiki-detail-img" alt="">
+        <a id="wikiDetailLink" class="login-btn" style="width:100%; margin-top:14px; flex:none; text-decoration:none; display:flex; align-items:center; justify-content:center;" href="#" target="_blank" rel="noopener">
+          <i class='bx bx-link-external'></i>&nbsp;Voir sur Wikipedia
+        </a>
+      </div>
+    </div>
 
     <div id="mapOverlay" class="info-overlay hidden">
       <div class="info-sheet" style="padding-bottom: 24px;">

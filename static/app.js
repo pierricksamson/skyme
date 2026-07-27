@@ -686,8 +686,9 @@
     });
   }
 
-  function renderSchedule(data) {
-    const body = document.getElementById('scheduleBody');
+  function renderSchedule(data, bodyId = 'scheduleBody') {
+    const body = document.getElementById(bodyId);
+    if (!body) return;
     body.innerHTML = '';
     data.objects.forEach((o) => {
       const row = document.createElement('div');
@@ -710,6 +711,7 @@
 
   // ---------- Wikipedia (image carrée + description) dans la popup info ----------
   const wikiInfoCache = new Map();
+  let currentWikiInfo = null; // { name, title, image, description, wiki_url }
 
   async function fetchObjectInfo(name) {
     if (wikiInfoCache.has(name)) return wikiInfoCache.get(name);
@@ -726,11 +728,13 @@
     }
   }
 
-  function renderInfoWiki(data) {
+  function renderInfoWiki(data, objectName) {
     const wrap = document.getElementById('infoWiki');
     const img = document.getElementById('infoWikiImg');
     const desc = document.getElementById('infoWikiDesc');
     if (!wrap || !img || !desc) return;
+
+    currentWikiInfo = data ? { ...data, name: objectName } : null;
 
     if (!data || (!data.image && !data.description)) {
       wrap.classList.add('hidden');
@@ -747,6 +751,45 @@
     desc.textContent = data.description || '';
     wrap.classList.remove('hidden');
   }
+
+  // Ouvre une fiche détaillée (titre + lien Wikipedia) quand on clique sur
+  // l'image miniature de la popup info.
+  function openWikiDetail() {
+    if (!currentWikiInfo) return;
+    const titleEl = document.getElementById('wikiDetailTitle');
+    const imgEl = document.getElementById('wikiDetailImg');
+    const linkEl = document.getElementById('wikiDetailLink');
+
+    titleEl.textContent = currentWikiInfo.title || currentWikiInfo.name || '—';
+
+    if (currentWikiInfo.image) {
+      imgEl.src = currentWikiInfo.image;
+      imgEl.classList.remove('hidden');
+    } else {
+      imgEl.removeAttribute('src');
+      imgEl.classList.add('hidden');
+    }
+
+    if (currentWikiInfo.wiki_url) {
+      linkEl.href = currentWikiInfo.wiki_url;
+      linkEl.classList.remove('hidden');
+    } else {
+      linkEl.href = '#';
+      linkEl.classList.add('hidden');
+    }
+
+    document.getElementById('wikiDetailOverlay').classList.remove('hidden');
+  }
+
+  function closeWikiDetail() {
+    document.getElementById('wikiDetailOverlay').classList.add('hidden');
+  }
+
+  document.getElementById('infoWikiImgBtn').addEventListener('click', openWikiDetail);
+  document.getElementById('wikiDetailClose').addEventListener('click', closeWikiDetail);
+  document.getElementById('wikiDetailOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'wikiDetailOverlay') closeWikiDetail();
+  });
 
   function openInfo(o) {
     // Le lever/coucher "vrai" (réel, non limité par la fenêtre d'affichage
@@ -765,9 +808,10 @@
     // (au cas où l'utilisateur aurait ouvert un autre objet entre-temps).
     const wikiWrap = document.getElementById('infoWiki');
     if (wikiWrap) wikiWrap.classList.add('hidden');
+    currentWikiInfo = null;
     const wikiRequestName = o.name;
     fetchObjectInfo(wikiRequestName).then((data) => {
-      if (infoObj && infoObj.name === wikiRequestName) renderInfoWiki(data);
+      if (infoObj && infoObj.name === wikiRequestName) renderInfoWiki(data, wikiRequestName);
     });
 
     const color = o.color || CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
@@ -819,6 +863,7 @@
     document.getElementById('infoOverlay').classList.add('hidden');
     if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
     infoObj = null;
+    closeWikiDetail();
   }
 
   function updateInfoFavBtn() {
@@ -1013,18 +1058,74 @@
 
   document.getElementById('agendaDayClose').addEventListener('click', closeAgendaDayPreview);
 
+  // ---------- Agenda : timetable intégrée (remplace le contenu de l'agenda) ----------
+  // Contrairement à l'ancien comportement (qui quittait l'agenda pour la vue
+  // "timeline"), "Ouvrir cette nuit" affiche désormais une timetable
+  // directement dans l'onglet Agenda, avec navigation jour précédent/suivant
+  // et un bouton fermer qui revient au calendrier.
+  let agendaTtDateObj = null; // Date actuellement affichée dans la timetable
+
   document.getElementById('agendaDayOpenBtn').addEventListener('click', () => {
     if (!agendaPreviewDate) return;
-    const { dateStr, dateObj } = agendaPreviewDate;
-    closeAgendaDayPreview();
-
-    errorPanel.classList.add('hidden');
-    mainContent.classList.add('hidden');
-    bottomNav.classList.add('hidden');
-    statusPanel.classList.remove('hidden');
-    setStatus(`Calculating sky for ${dateObj.toLocaleDateString([], { month: 'short', day: 'numeric' })}…`);
-    fetchSky(currentLat, currentLon, currentElev, dateStr).then(() => switchView('timeline'));
+    openAgendaTimetable(agendaPreviewDate.dateObj);
   });
+
+  function openAgendaTimetable(dateObj) {
+    agendaTtDateObj = new Date(dateObj);
+    document.getElementById('agendaMainView').classList.add('hidden');
+    document.getElementById('agendaTimetableView').classList.remove('hidden');
+    loadAgendaTimetable();
+  }
+
+  function closeAgendaTimetable() {
+    agendaTtDateObj = null;
+    document.getElementById('agendaTimetableView').classList.add('hidden');
+    document.getElementById('agendaMainView').classList.remove('hidden');
+  }
+
+  async function loadAgendaTimetable() {
+    if (!agendaTtDateObj) return;
+    const dateObj = agendaTtDateObj;
+    const dateStr = toDateStr(dateObj);
+    const dateLabel = document.getElementById('agendaTtDate');
+    const body = document.getElementById('agendaTtBody');
+
+    dateLabel.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    document.getElementById('agendaTtPrev').disabled = dateObj <= today0;
+    body.innerHTML = '<div class="lib-empty">Chargement…</div>';
+
+    try {
+      const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      // Si l'utilisateur a changé de jour entre-temps, on ignore la réponse.
+      if (!agendaTtDateObj || toDateStr(agendaTtDateObj) !== dateStr) return;
+
+      if ((data.objects || []).length === 0) {
+        body.innerHTML = '<div class="lib-empty">Aucun objet visible cette nuit-là.</div>';
+      } else {
+        renderSchedule(data, 'agendaTtBody');
+      }
+    } catch (e) {
+      if (agendaTtDateObj && toDateStr(agendaTtDateObj) === dateStr) {
+        body.innerHTML = '<div class="lib-empty">Impossible de charger le programme.</div>';
+      }
+    }
+  }
+
+  document.getElementById('agendaTtPrev').addEventListener('click', () => {
+    if (!agendaTtDateObj || agendaTtDateObj <= today0) return;
+    agendaTtDateObj.setDate(agendaTtDateObj.getDate() - 1);
+    loadAgendaTimetable();
+  });
+  document.getElementById('agendaTtNext').addEventListener('click', () => {
+    if (!agendaTtDateObj) return;
+    agendaTtDateObj.setDate(agendaTtDateObj.getDate() + 1);
+    loadAgendaTimetable();
+  });
+  document.getElementById('agendaTtClose').addEventListener('click', closeAgendaTimetable);
 
   // Récupère, pour toute la plage de l'agenda, le nombre d'objets favoris
   // visibles chaque nuit (selon la plage horaire + hauteur mini choisies),

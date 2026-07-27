@@ -1454,11 +1454,27 @@ body.red-filter::after {
   gap: 12px;
   margin-bottom: 16px;
 }
+.info-wiki-img-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  flex: none;
+  line-height: 0;
+}
 .info-wiki-img {
   width: 76px;
   height: 76px;
   min-width: 76px;
   border-radius: 12px;
+  object-fit: cover;
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+}
+.wiki-detail-img {
+  width: 100%;
+  max-height: 260px;
+  border-radius: 14px;
   object-fit: cover;
   background: var(--bg-elevated);
   border: 1px solid var(--hairline);
@@ -1603,4 +1619,20 @@ body.red-filter::after {
 .cal-day-selected {
   border-color: var(--accent) !important;
   background: var(--accent-soft) !important;
+}
+
+/* ---------- Agenda : timetable intégrée (remplace le calendrier) ---------- */
+.agenda-timetable-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.agenda-timetable-header .agenda-day-panel-title {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
