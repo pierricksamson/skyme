@@ -12,10 +12,11 @@ import secrets
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
+import os
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-DB_PATH = Path(__file__).resolve().parent / "skyme.db"
+DB_PATH = os.path.join("storage", "skyme.db")
 
 DEFAULT_SETTINGS = {
     "zoom_mode": "auto",

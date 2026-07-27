@@ -54,7 +54,7 @@ def login_required(view):
 # Cache persistant sur disque (wiki_cache.json) : évite de re-solliciter
 # l'API Wikipedia à chaque ouverture de la popup pour un même objet, y
 # compris entre deux redémarrages du process serveur (économie d'appels API).
-_WIKI_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wiki_cache.json")
+_WIKI_CACHE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage", "wiki_cache.json")
 _WIKI_CACHE_LOCK = Lock()
 
 
