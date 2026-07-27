@@ -652,6 +652,46 @@
     });
   }
 
+  // ---------- Wikipedia (image carrée + description) dans la popup info ----------
+  const wikiInfoCache = new Map();
+
+  async function fetchObjectInfo(name) {
+    if (wikiInfoCache.has(name)) return wikiInfoCache.get(name);
+    try {
+      const res = await fetch(`/api/object-info?name=${encodeURIComponent(name)}`);
+      if (!res.ok) throw new Error('bad response');
+      const data = await res.json();
+      wikiInfoCache.set(name, data);
+      return data;
+    } catch (e) {
+      const fallback = { image: null, description: null };
+      wikiInfoCache.set(name, fallback);
+      return fallback;
+    }
+  }
+
+  function renderInfoWiki(data) {
+    const wrap = document.getElementById('infoWiki');
+    const img = document.getElementById('infoWikiImg');
+    const desc = document.getElementById('infoWikiDesc');
+    if (!wrap || !img || !desc) return;
+
+    if (!data || (!data.image && !data.description)) {
+      wrap.classList.add('hidden');
+      return;
+    }
+
+    if (data.image) {
+      img.src = data.image;
+      img.classList.remove('hidden');
+    } else {
+      img.removeAttribute('src');
+      img.classList.add('hidden');
+    }
+    desc.textContent = data.description || '';
+    wrap.classList.remove('hidden');
+  }
+
   function openInfo(o) {
     // Le lever/coucher "vrai" (réel, non limité par la fenêtre d'affichage
     // marge/plage fixe) prime toujours quand il est disponible. Les objets
@@ -662,6 +702,17 @@
     const trueRise = o.true_rise_iso || o.rise_iso || null;
     const trueSet = o.true_set_iso || o.set_iso || null;
     infoObj = { ...o, rise_iso: trueRise, set_iso: trueSet };
+
+    // Chargement asynchrone du résumé Wikipedia (image + description) ;
+    // on masque le bloc pendant le chargement puis on vérifie que la
+    // popup affiche toujours le même objet avant d'appliquer le résultat
+    // (au cas où l'utilisateur aurait ouvert un autre objet entre-temps).
+    const wikiWrap = document.getElementById('infoWiki');
+    if (wikiWrap) wikiWrap.classList.add('hidden');
+    const wikiRequestName = o.name;
+    fetchObjectInfo(wikiRequestName).then((data) => {
+      if (infoObj && infoObj.name === wikiRequestName) renderInfoWiki(data);
+    });
 
     const color = o.color || CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
     document.getElementById('infoDot').style.background = color;

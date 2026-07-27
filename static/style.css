@@ -35,7 +35,13 @@ html, body {
   scrollbar-width: none; /* Firefox */
 }
 
-html::-webkit-scrollbar {
+.info-wiki-desc {
+  overflow: auto;
+    scrollbar-width: none; /* Firefox */
+
+}
+
+html::-webkit-scrollbar .info-wiki-desc {
     display: none; /* Chrome, Edge, Safari */
 }
 
@@ -1351,6 +1357,29 @@ body.red-filter::after {
   color: var(--text-muted);
   font-size: 13px;
 }
+.info-wiki {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.info-wiki-img {
+  width: 76px;
+  height: 76px;
+  min-width: 76px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+}
+.info-wiki-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-height: 95px;
+}
+
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

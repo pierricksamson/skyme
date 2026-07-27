@@ -1,3 +1,4 @@
+import re
 import warnings
 from functools import wraps
 
@@ -15,6 +16,7 @@ from astropy.coordinates import (
     EarthLocation, AltAz, SkyCoord, get_body, get_sun
 )
 import astropy.units as u
+import requests
 
 from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
 from db import (
@@ -43,6 +45,64 @@ def login_required(view):
         request.user = user
         return view(*args, **kwargs)
     return wrapped
+
+
+# ---------- Résumé Wikipedia (image carrée + description) pour la popup info ----------
+# Cache mémoire simple : évite de re-solliciter l'API Wikipedia à chaque
+# ouverture de la popup pour un même objet, pendant la durée de vie du
+# process serveur.
+_WIKI_CACHE = {}
+
+
+def _wiki_title(name):
+    """Convertit le nom affiché dans l'app en titre de page Wikipedia.
+
+    Les objets du catalogue Deep Sky sont affichés avec leur préfixe
+    Messier ("M31 Andromeda Galaxy", "M42 Orion Nebula", ...), mais les
+    pages Wikipedia correspondantes n'utilisent pas ce préfixe (la page
+    s'appelle "Andromeda Galaxy", pas "M31 Andromeda Galaxy"). On retire
+    donc ce préfixe uniquement pour la requête à l'API ; le nom affiché
+    dans l'UI (o.name) n'est pas modifié.
+    """
+    stripped = re.sub(r"^M\d+\s+", "", name).strip()
+    return stripped or name
+
+
+def fetch_wikipedia_summary(title):
+    """Récupère un court résumé Wikipedia (image miniature + description)
+    pour un titre de page donné. Retourne toujours un dict avec les clés
+    'image' et 'description' (à None si indisponible / hors-ligne)."""
+    if title in _WIKI_CACHE:
+        return _WIKI_CACHE[title]
+
+    result = {"image": None, "description": None}
+    try:
+        resp = requests.get(
+            "https://en.wikipedia.org/api/rest_v1/page/summary/"
+            + requests.utils.quote(_wiki_title(title)),
+            headers={"User-Agent": "Skyme/1.0 (astronomy app; contact: admin@skyme.local)"},
+            timeout=5,
+        )
+        if resp.ok:
+            data = resp.json()
+            thumb = data.get("thumbnail") or data.get("originalimage")
+            if thumb:
+                result["image"] = thumb.get("source")
+            result["description"] = data.get("extract")
+    except requests.RequestException:
+        pass
+
+    _WIKI_CACHE[title] = result
+    return result
+
+
+@app.route("/api/object-info")
+@login_required
+def object_info():
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    return jsonify(fetch_wikipedia_summary(name))
 
 
 STEP_MINUTES = 4
