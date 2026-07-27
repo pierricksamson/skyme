@@ -1,4 +1,6 @@
 (() => {
+  const agendaFilterState = { cat: 'all', maxMag: null };
+
   const statusPanel = document.getElementById('statusPanel');
   const statusText = document.getElementById('statusText');
   const errorPanel = document.getElementById('errorPanel');
@@ -40,6 +42,74 @@
   let nowLineTimer = null;
   let infoObj = null;
   let infoCountdownTimer = null;
+
+  // ---------- Filtre timeline (partagé Timeline + Agenda) ----------
+  // Filtre purement côté client : catégorie (ou favoris), magnitude max.
+  // N'affecte que le rendu des blocs (le layout des voies reste basé sur
+  // data.lane_count / o.lane calculés côté serveur, ce qui évite de tout
+  // recalculer côté client à chaque changement de filtre).
+  const tlFilterState = { cat: 'all', maxMag: null };
+
+  function objectPassesFilter(o, filterState) {
+    if (filterState.cat === 'favorites') {
+      if (!isFavorite(o.name)) return false;
+    } else if (filterState.cat !== 'all' && o.category !== filterState.cat) {
+      return false;
+    }
+    if (filterState.maxMag !== null && !isNaN(filterState.maxMag)) {
+      if (o.magnitude === null || o.magnitude === undefined) return false;
+      if (o.magnitude > filterState.maxMag) return false;
+    }
+    return true;
+  }
+
+  function filterObjects(objects, filterState) {
+    return objects.filter((o) => objectPassesFilter(o, filterState));
+  }
+
+  function wireFilterPanel({ toggleBtnId, panelId, chipSelector, magInputId, magClearId, countId, filterState, onChange }) {
+    const toggleBtn = document.getElementById(toggleBtnId);
+    const panel = document.getElementById(panelId);
+    const magInput = document.getElementById(magInputId);
+    const magClear = document.getElementById(magClearId);
+    if (!toggleBtn || !panel) return;
+
+    toggleBtn.addEventListener('click', () => {
+      panel.classList.toggle('hidden');
+      toggleBtn.classList.toggle('active', !panel.classList.contains('hidden'));
+    });
+
+    document.querySelectorAll(chipSelector).forEach((chip) => {
+      chip.addEventListener('click', () => {
+        filterState.cat = chip.dataset.cat;
+        document.querySelectorAll(chipSelector).forEach((c) => c.classList.toggle('active', c === chip));
+        onChange();
+      });
+    });
+
+    if (magInput) {
+      magInput.addEventListener('input', () => {
+        const v = parseFloat(magInput.value);
+        filterState.maxMag = magInput.value === '' || isNaN(v) ? null : v;
+        onChange();
+      });
+    }
+    if (magClear) {
+      magClear.addEventListener('click', () => {
+        filterState.maxMag = null;
+        if (magInput) magInput.value = '';
+        onChange();
+      });
+    }
+  }
+
+  function updateFilterCount(countId, total, shown) {
+    const el = document.getElementById(countId);
+    if (!el) return;
+    el.textContent = (total === shown)
+      ? `${total} objet${total > 1 ? 's' : ''}`
+      : `${shown} / ${total} objet${total > 1 ? 's' : ''} affiché${shown > 1 ? 's' : ''}`;
+  }
 
   const AGENDA_DAYS = 30;
 
@@ -499,7 +569,10 @@
       lanes.appendChild(col);
     }
 
-    data.objects.forEach((o) => {
+    const visibleObjects = filterObjects(data.objects, tlFilterState);
+    updateFilterCount('tlFilterCount', data.objects.length, visibleObjects.length);
+
+    visibleObjects.forEach((o) => {
       const rise = new Date(o.rise_iso).getTime();
       const set = new Date(o.set_iso).getTime();
       const topPx = ((rise - start) / 60000) * pxPerMin;
@@ -924,6 +997,28 @@
   refreshBtn.addEventListener('click', resolveLocation);
   retryBtn.addEventListener('click', resolveLocation);
 
+  wireFilterPanel({
+    toggleBtnId: 'tlFilterBtn',
+    panelId: 'tlFilterPanel',
+    chipSelector: '.tl-filter-chip',
+    magInputId: 'tlFilterMag',
+    magClearId: 'tlFilterMagClear',
+    countId: 'tlFilterCount',
+    filterState: tlFilterState,
+    onChange: () => { if (currentData) renderTimeline(currentData); },
+  });
+
+  wireFilterPanel({
+    toggleBtnId: 'agendaFilterBtn',
+    panelId: 'agendaFilterPanel',
+    chipSelector: '.agenda-filter-chip',
+    magInputId: 'agendaFilterMag',
+    magClearId: 'agendaFilterMagClear',
+    countId: 'agendaFilterCount',
+    filterState: agendaFilterState,
+    onChange: () => { if (agendaTtData) renderAgendaTimeline(agendaTtData); },
+  });
+
   function toDateStr(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -1211,7 +1306,10 @@
       lanes.appendChild(col);
     }
 
-    data.objects.forEach((o) => {
+    const visibleObjects = filterObjects(data.objects, agendaFilterState);
+    updateFilterCount('agendaFilterCount', data.objects.length, visibleObjects.length);
+
+    visibleObjects.forEach((o) => {
       const rise = new Date(o.rise_iso).getTime();
       const set = new Date(o.set_iso).getTime();
       const topPx = ((rise - start) / 60000) * pxPerMin;

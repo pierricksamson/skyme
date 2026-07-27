@@ -376,6 +376,66 @@ body.red-filter::after {
   text-align: center;
 }
 
+/* ---------- Timeline filter panel ---------- */
+.tl-filter-btn.active {
+  color: #10100e;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.tl-filter-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 14px 14px;
+  margin: 0 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.tl-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tl-filter-mag-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-filter-mag-row label {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.tl-filter-mag-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.tl-filter-mag-row input:focus { border-color: var(--accent-dim); }
+.tl-filter-mag-clear {
+  flex: none;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.tl-filter-count {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
 /* ---------- Vertical timeline ---------- */
 .tl-wrap {
   padding-top: 5px;

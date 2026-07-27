@@ -43,6 +43,9 @@
           <span id="tlDate" class="tl-date">—</span>
           <div class="tl-meta-right">
             <span id="nowTag" class="now-tag">now</span>
+            <button id="tlFilterBtn" class="icon-btn tl-filter-btn" title="Filtrer">
+              <i class='bx bx-filter-alt'></i>
+            </button>
             <div class="zoom-ctrl">
               <button id="zoomFit" class="zoom-btn zoom-fit-btn" title="Reset zoom (fit content)">⤢</button>
               <button id="zoomOut" class="zoom-btn" title="Zoom out">–</button>
@@ -50,6 +53,24 @@
               <button id="zoomIn" class="zoom-btn" title="Zoom in">+</button>
             </div>
           </div>
+        </div>
+        <div id="tlFilterPanel" class="tl-filter-panel hidden">
+          <div class="tl-filter-chips">
+            <button type="button" class="lib-chip tl-filter-chip active" data-cat="all">Tout</button>
+            <button type="button" class="lib-chip tl-filter-chip lib-chip-fav" data-cat="favorites">★ Favoris</button>
+            <button type="button" class="lib-chip tl-filter-chip" data-cat="moon">Lune</button>
+            <button type="button" class="lib-chip tl-filter-chip" data-cat="planet">Planètes</button>
+            <button type="button" class="lib-chip tl-filter-chip" data-cat="star">Étoiles</button>
+            <button type="button" class="lib-chip tl-filter-chip" data-cat="galaxy">Galaxies</button>
+            <button type="button" class="lib-chip tl-filter-chip" data-cat="nebula">Nébuleuses</button>
+            <button type="button" class="lib-chip tl-filter-chip" data-cat="cluster">Amas</button>
+          </div>
+          <div class="tl-filter-mag-row">
+            <label for="tlFilterMag">Magnitude max</label>
+            <input type="number" id="tlFilterMag" step="0.1" placeholder="Aucune limite">
+            <button type="button" id="tlFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
+          </div>
+          <p id="tlFilterCount" class="tl-filter-count"></p>
         </div>
         <div id="tlWrap" class="tl-wrap">
           <div id="tlHours" class="tl-hours"></div>
@@ -184,6 +205,9 @@
           <div class="tl-meta">
             <span></span>
             <div class="tl-meta-right">
+              <button id="agendaFilterBtn" class="icon-btn tl-filter-btn" title="Filtrer">
+                <i class='bx bx-filter-alt'></i>
+              </button>
               <div class="zoom-ctrl">
                 <button id="agendaZoomFit" class="zoom-btn zoom-fit-btn" title="Reset zoom (fit content)">⤢</button>
                 <button id="agendaZoomOut" class="zoom-btn" title="Zoom out">–</button>
@@ -191,6 +215,24 @@
                 <button id="agendaZoomIn" class="zoom-btn" title="Zoom in">+</button>
               </div>
             </div>
+          </div>
+          <div id="agendaFilterPanel" class="tl-filter-panel hidden">
+            <div class="tl-filter-chips">
+              <button type="button" class="lib-chip agenda-filter-chip active" data-cat="all">Tout</button>
+              <button type="button" class="lib-chip agenda-filter-chip lib-chip-fav" data-cat="favorites">★ Favoris</button>
+              <button type="button" class="lib-chip agenda-filter-chip" data-cat="moon">Lune</button>
+              <button type="button" class="lib-chip agenda-filter-chip" data-cat="planet">Planètes</button>
+              <button type="button" class="lib-chip agenda-filter-chip" data-cat="star">Étoiles</button>
+              <button type="button" class="lib-chip agenda-filter-chip" data-cat="galaxy">Galaxies</button>
+              <button type="button" class="lib-chip agenda-filter-chip" data-cat="nebula">Nébuleuses</button>
+              <button type="button" class="lib-chip agenda-filter-chip" data-cat="cluster">Amas</button>
+            </div>
+            <div class="tl-filter-mag-row">
+              <label for="agendaFilterMag">Magnitude max</label>
+              <input type="number" id="agendaFilterMag" step="0.1" placeholder="Aucune limite">
+              <button type="button" id="agendaFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
+            </div>
+            <p id="agendaFilterCount" class="tl-filter-count"></p>
           </div>
           <div id="agendaTlWrap" class="tl-wrap">
             <div id="agendaTlHours" class="tl-hours"></div>
