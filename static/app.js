@@ -412,8 +412,8 @@
     renderLegend(data);
     renderSchedule(data);
     renderAgendaCalendar();
-    loadAgendaFavCounts();
     renderLibraryStats();
+    renderOverviewFavorites();
 
     if (nowLineTimer) clearInterval(nowLineTimer);
     positionNowLine(data);
@@ -848,8 +848,8 @@
     }
     if (name === 'library') {
       initLibraryView();
-    } else {
-      stopLibraryCountdownTimer();
+    } else if (name === 'overview') {
+      renderOverviewFavorites();
     }
     if (name !== 'tools') {
       stopActiveTool();
@@ -1010,6 +1010,7 @@
       let url = `/api/agenda/favorites-count?lat=${currentLat}&lon=${currentLon}&elev=${currentElev}`;
       url += `&mode=${mode}&margin=${margin}&min_alt=${minAlt}`;
       url += `&fixed_start_hm=${encodeURIComponent(getFixedStart())}&fixed_end_hm=${encodeURIComponent(getFixedEnd())}`;
+      url += `&tz_offset_min=${-new Date().getTimezoneOffset()}`;
       url += `&start_date=${toDateStr(today0)}&end_date=${toDateStr(agendaLastDay)}`;
 
       const res = await fetch(url);
@@ -1283,6 +1284,7 @@
     const wasFav = favoritesSet.has(name);
     if (wasFav) favoritesSet.delete(name); else favoritesSet.add(name);
     renderLibraryList();
+    renderOverviewFavorites();
     if (currentData) renderTimeline(currentData);
 
     try {
@@ -1299,7 +1301,12 @@
       // best effort : l'état local reste appliqué pour cette session
     }
     renderLibraryList();
+    renderOverviewFavorites();
     if (currentData) renderTimeline(currentData);
+    // Le badge "★ N" de l'agenda dépend directement des favoris : sans ce
+    // rafraîchissement, il restait figé sur l'état du chargement initial
+    // jusqu'au prochain rechargement complet de la page.
+    loadAgendaFavCounts();
   }
 
   // ---------- Overview: library stats ----------
@@ -1419,67 +1426,96 @@
       return;
     }
 
-    listEl.innerHTML = filtered.map((o) => {
-      const color = CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
-      const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
-      const nameAttr = o.name.replace(/"/g, '&quot;');
-      const fav = isFavorite(o.name);
+    listEl.innerHTML = filtered.map(catalogRowHtml).join('');
 
-      let whenLine = '';
-      let countdownHtml = '';
-      if (o.always_visible) {
-        whenLine = `<span class="lib-row-when lib-row-when-special">Toujours au-dessus de ${getMinAlt()}°</span>`;
-        countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">Toujours visible</span>`;
-      } else if (o.never_visible) {
-        // Toujours sous l'altitude minimale dans l'immédiat, mais un lever
-        // futur (jusqu'à 30 jours) a pu être trouvé (déclinaison de la
-        // Lune/des planètes qui évolue). On affiche un compte à rebours
-        // plutôt qu'un message statique, y compris hors plage horaire.
-        if (o.rise_iso) {
-          whenLine = `<span class="lib-row-when lib-row-when-special">Sous ${getMinAlt()}° ici pour l\u2019instant</span>`;
-          countdownHtml = `
-            <span class="lib-row-countdown lib-row-countdown-far" data-rise="${o.rise_iso}">
-              <span class="lib-row-countdown-label">Se lève dans</span>
-              <span class="lib-row-countdown-value">--</span>
-            </span>`;
-        } else {
-          whenLine = `<span class="lib-row-when lib-row-when-special">Sous ${getMinAlt()}° ici</span>`;
-          countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">—</span>`;
-        }
-      } else if (o.rise_iso && o.set_iso) {
-        whenLine = `<span class="lib-row-when">Lève ${fmtTime(o.rise_iso)} · Couche ${fmtTime(o.set_iso)}</span>`;
+    tickLibraryCountdowns();
+  }
+
+  // Rendu HTML d'une ligne "objet du catalogue" (nom, lever/coucher,
+  // magnitude, étoile favori...). Partagé entre la Bibliothèque et la
+  // liste des favoris de l'Overview.
+  function catalogRowHtml(o) {
+    const color = CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
+    const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
+    const nameAttr = o.name.replace(/"/g, '&quot;');
+    const fav = isFavorite(o.name);
+
+    let whenLine = '';
+    let countdownHtml = '';
+    if (o.always_visible) {
+      whenLine = `<span class="lib-row-when lib-row-when-special">Toujours au-dessus de ${getMinAlt()}°</span>`;
+      countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">Toujours visible</span>`;
+    } else if (o.never_visible) {
+      // Toujours sous l'altitude minimale dans l'immédiat, mais un lever
+      // futur (jusqu'à 30 jours) a pu être trouvé (déclinaison de la
+      // Lune/des planètes qui évolue). On affiche un compte à rebours
+      // plutôt qu'un message statique, y compris hors plage horaire.
+      if (o.rise_iso) {
+        whenLine = `<span class="lib-row-when lib-row-when-special">Sous ${getMinAlt()}° ici pour l\u2019instant</span>`;
         countdownHtml = `
-          <span class="lib-row-countdown" data-rise="${o.rise_iso}" data-set="${o.set_iso}">
-            <span class="lib-row-countdown-label">—</span>
-            <span class="lib-row-countdown-value">--:--:--</span>
+          <span class="lib-row-countdown lib-row-countdown-far" data-rise="${o.rise_iso}">
+            <span class="lib-row-countdown-label">Se lève dans</span>
+            <span class="lib-row-countdown-value">--</span>
           </span>`;
+      } else {
+        whenLine = `<span class="lib-row-when lib-row-when-special">Sous ${getMinAlt()}° ici</span>`;
+        countdownHtml = `<span class="lib-row-countdown lib-row-countdown-static">—</span>`;
       }
+    } else if (o.rise_iso && o.set_iso) {
+      whenLine = `<span class="lib-row-when">Lève ${fmtTime(o.rise_iso)} · Couche ${fmtTime(o.set_iso)}</span>`;
+      countdownHtml = `
+        <span class="lib-row-countdown" data-rise="${o.rise_iso}" data-set="${o.set_iso}">
+          <span class="lib-row-countdown-label">—</span>
+          <span class="lib-row-countdown-value">--:--:--</span>
+        </span>`;
+    }
 
-      return `
-        <div class="lib-row lib-row-clickable" data-name="${nameAttr}">
-          <span class="lib-row-dot" style="background:${color}"></span>
-          <span class="lib-row-main">
-            <span class="lib-row-name">${o.name}</span>
-            <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
-            ${whenLine}
-          </span>
-          <span class="lib-row-side">
-            <span class="lib-row-mag">${magStr}</span>
-            ${countdownHtml}
-          </span>
-          <button type="button" class="lib-fav-btn${fav ? ' active' : ''}" data-name="${nameAttr}" title="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">
-            <i class='bx ${fav ? 'bxs-star' : 'bx-star'}'></i>
-          </button>
-        </div>
-      `;
-    }).join('');
+    return `
+      <div class="lib-row lib-row-clickable" data-name="${nameAttr}">
+        <span class="lib-row-dot" style="background:${color}"></span>
+        <span class="lib-row-main">
+          <span class="lib-row-name">${o.name}</span>
+          <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
+          ${whenLine}
+        </span>
+        <span class="lib-row-side">
+          <span class="lib-row-mag">${magStr}</span>
+          ${countdownHtml}
+        </span>
+        <button type="button" class="lib-fav-btn${fav ? ' active' : ''}" data-name="${nameAttr}" title="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">
+          <i class='bx ${fav ? 'bxs-star' : 'bx-star'}'></i>
+        </button>
+      </div>
+    `;
+  }
 
+  // ---------- Overview: liste des favoris ----------
+  async function renderOverviewFavorites() {
+    const listEl = document.getElementById('overviewFavList');
+    const emptyEl = document.getElementById('overviewFavEmpty');
+    if (!listEl) return;
+
+    const items = await fetchCatalogListOnce();
+    if (!items) {
+      listEl.innerHTML = '';
+      if (emptyEl) { emptyEl.textContent = 'Impossible de charger les favoris.'; emptyEl.classList.remove('hidden'); }
+      return;
+    }
+
+    const favs = items.filter((o) => isFavorite(o.name));
+    if (favs.length === 0) {
+      listEl.innerHTML = '';
+      if (emptyEl) { emptyEl.textContent = 'Aucun favori pour l\u2019instant. Touche l\u2019étoile d\u2019un objet pour l\u2019ajouter.'; emptyEl.classList.remove('hidden'); }
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+    listEl.innerHTML = favs.map(catalogRowHtml).join('');
     tickLibraryCountdowns();
   }
 
   function tickLibraryCountdowns() {
     const now = Date.now();
-    document.querySelectorAll('#libList .lib-row-countdown[data-rise]').forEach((el) => {
+    document.querySelectorAll('.lib-row-countdown[data-rise]').forEach((el) => {
       const riseT = new Date(el.dataset.rise).getTime();
       const labelEl = el.querySelector('.lib-row-countdown-label');
       const valueEl = el.querySelector('.lib-row-countdown-value');
@@ -1504,18 +1540,13 @@
   }
 
   function startLibraryCountdownTimer() {
-    if (libCountdownTimer) clearInterval(libCountdownTimer);
+    if (libCountdownTimer) return; // déjà démarré (timer global, unique)
     libCountdownTimer = setInterval(tickLibraryCountdowns, 1000);
-  }
-
-  function stopLibraryCountdownTimer() {
-    if (libCountdownTimer) { clearInterval(libCountdownTimer); libCountdownTimer = null; }
   }
 
   async function initLibraryView() {
     await fetchCatalogListOnce();
     renderLibraryList();
-    startLibraryCountdownTimer();
   }
 
   const libSearchInput = document.getElementById('libSearchInput');
@@ -1534,34 +1565,37 @@
     });
   });
 
-  const libListEl = document.getElementById('libList');
-  if (libListEl) {
-    libListEl.addEventListener('click', (e) => {
-      const favBtn = e.target.closest('.lib-fav-btn');
-      if (favBtn && favBtn.dataset.name) {
-        e.stopPropagation();
-        toggleFavorite(favBtn.dataset.name);
-        return;
-      }
-      const row = e.target.closest('.lib-row');
-      if (!row || !row.dataset.name) return;
-      const catalogItem = catalogList && catalogList.find((o) => o.name === row.dataset.name);
-      if (!catalogItem) return;
-      // Les objets de currentData (timeline) portent un true_rise_iso/
-      // true_set_iso calculé par rapport à la nuit affichée, qui peut être
-      // une nuit future (navigation dans l'agenda) différente d'aujourd'hui.
-      // Le catalogue, lui, est toujours calculé par rapport à l'heure
-      // réelle actuelle : on ne préfère donc le timeline que s'il concerne
-      // bien le jour courant, sinon le catalogue reste la seule source
-      // fiable pour le lever/coucher affiché dans la fiche objet.
-      const isTodayData = currentData
-        && (!currentData.requested_date || currentData.requested_date === toDateStr(new Date()));
-      const liveMatch = (isTodayData && currentData.objects)
-        ? currentData.objects.find((obj) => obj.name === catalogItem.name)
-        : null;
-      openInfo(liveMatch || catalogItem);
-    });
+  function handleCatalogRowClick(e) {
+    const favBtn = e.target.closest('.lib-fav-btn');
+    if (favBtn && favBtn.dataset.name) {
+      e.stopPropagation();
+      toggleFavorite(favBtn.dataset.name);
+      return;
+    }
+    const row = e.target.closest('.lib-row');
+    if (!row || !row.dataset.name) return;
+    const catalogItem = catalogList && catalogList.find((o) => o.name === row.dataset.name);
+    if (!catalogItem) return;
+    // Les objets de currentData (timeline) portent un true_rise_iso/
+    // true_set_iso calculé par rapport à la nuit affichée, qui peut être
+    // une nuit future (navigation dans l'agenda) différente d'aujourd'hui.
+    // Le catalogue, lui, est toujours calculé par rapport à l'heure
+    // réelle actuelle : on ne préfère donc le timeline que s'il concerne
+    // bien le jour courant, sinon le catalogue reste la seule source
+    // fiable pour le lever/coucher affiché dans la fiche objet.
+    const isTodayData = currentData
+      && (!currentData.requested_date || currentData.requested_date === toDateStr(new Date()));
+    const liveMatch = (isTodayData && currentData.objects)
+      ? currentData.objects.find((obj) => obj.name === catalogItem.name)
+      : null;
+    openInfo(liveMatch || catalogItem);
   }
+
+  const libListEl = document.getElementById('libList');
+  if (libListEl) libListEl.addEventListener('click', handleCatalogRowClick);
+
+  const overviewFavListEl = document.getElementById('overviewFavList');
+  if (overviewFavListEl) overviewFavListEl.addEventListener('click', handleCatalogRowClick);
 
   // ========================================================================
   // ---------- Tools: Compass / Level / Polar Clock ----------
@@ -1942,6 +1976,7 @@
       }],
       ['Chargement de la bibliothèque…', fetchCatalogListOnce],
       ['Chargement des statistiques…', fetchCatalogStatsOnce],
+      ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
     ];
 
     for (let i = 0; i < steps.length; i++) {
@@ -1967,6 +2002,8 @@
     initialLoadDone = true;
     showAppShell();
     renderLibraryList();
+    renderOverviewFavorites();
+    startLibraryCountdownTimer();
   }
   initApp();
 })();

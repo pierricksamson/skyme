@@ -682,6 +682,18 @@ def agenda_favorites_count():
     except (TypeError, ValueError):
         margin = 30
 
+    # Décalage du fuseau horaire local du navigateur (en minutes, ex: +120
+    # pour UTC+2), utilisé uniquement en mode "fixed" : fixed_start_hm /
+    # fixed_end_hm sont des heures murales locales ("20:00"), pas UTC. Sans
+    # cette correction, on les traitait comme si elles étaient déjà en UTC,
+    # ce qui décalait la fenêtre de la nuit d'1 à 2h et faisait apparaître
+    # ou disparaître des objets proches du bord de la fenêtre selon
+    # l'heure/la saison (d'où un compte de favoris incohérent).
+    try:
+        tz_offset_min = int(request.args.get("tz_offset_min", 0))
+    except (TypeError, ValueError):
+        tz_offset_min = 0
+
     def parse_hm(value, default_h, default_m):
         try:
             h, m = (value or "").split(":")
@@ -721,8 +733,13 @@ def agenda_favorites_count():
         sunset_t, sunrise_t = find_night_window(location, now_utc)
 
         if mode == "fixed":
-            t_start = Time(day.replace(hour=start_h, minute=start_m, tzinfo=timezone.utc))
-            t_end = Time(day.replace(hour=end_h, minute=end_m, tzinfo=timezone.utc))
+            # start_h/start_m/end_h/end_m sont des heures locales : on les
+            # convertit en UTC via tz_offset_min avant de leur assigner un
+            # tzinfo UTC (voir commentaire plus haut).
+            local_start = day.replace(hour=start_h, minute=start_m)
+            local_end = day.replace(hour=end_h, minute=end_m)
+            t_start = Time((local_start - timedelta(minutes=tz_offset_min)).replace(tzinfo=timezone.utc))
+            t_end = Time((local_end - timedelta(minutes=tz_offset_min)).replace(tzinfo=timezone.utc))
             if t_end <= t_start:
                 t_end = t_end + 1 * u.day
         else:
