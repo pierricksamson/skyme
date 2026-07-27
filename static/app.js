@@ -616,6 +616,16 @@
   // redimensionnement / rotation d'écran.
   window.addEventListener('resize', () => requestAnimationFrame(sizeAgendaDayPanel));
 
+  window.addEventListener('resize', () => {
+    if (agendaZoomMode !== 'auto' || !agendaTtData || document.getElementById('agendaTimetableView').classList.contains('hidden')) return;
+    clearTimeout(agendaResizeTimer);
+    agendaResizeTimer = setTimeout(() => {
+      renderAgendaTimeline(agendaTtData);
+      positionAgendaNowLine(agendaTtData);
+      positionAgendaSunLines(agendaTtData);
+    }, 150);
+  });
+
   let pinchStartDist = null;
   let pinchStartZoom = 1;
   const tlWrapEl_forPinch = () => document.getElementById('tlWrap');
@@ -1083,16 +1093,21 @@
     document.getElementById('agendaMainView').classList.remove('hidden');
   }
 
+  let agendaTtData = null; // dernières données chargées pour la timeline agenda
+  let agendaZoomMode = 'auto';
+  let agendaZoomLevel = 1;
+  let agendaResizeTimer = null;
+
   async function loadAgendaTimetable() {
     if (!agendaTtDateObj) return;
     const dateObj = agendaTtDateObj;
     const dateStr = toDateStr(dateObj);
     const dateLabel = document.getElementById('agendaTtDate');
-    const body = document.getElementById('agendaTtBody');
+    const lanes = document.getElementById('agendaTlLanes');
 
     dateLabel.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     document.getElementById('agendaTtPrev').disabled = dateObj <= today0;
-    body.innerHTML = '<div class="lib-empty">Chargement…</div>';
+    lanes.innerHTML = '<div class="lib-empty">Chargement…</div>';
 
     try {
       const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
@@ -1103,17 +1118,193 @@
       // Si l'utilisateur a changé de jour entre-temps, on ignore la réponse.
       if (!agendaTtDateObj || toDateStr(agendaTtDateObj) !== dateStr) return;
 
+      agendaTtData = data;
       if ((data.objects || []).length === 0) {
-        body.innerHTML = '<div class="lib-empty">Aucun objet visible cette nuit-là.</div>';
+        lanes.innerHTML = '<div class="lib-empty">Aucun objet visible cette nuit-là.</div>';
       } else {
-        renderSchedule(data, 'agendaTtBody');
+        agendaZoomMode = 'auto';
+        renderAgendaTimeline(data);
+        positionAgendaNowLine(data);
+        positionAgendaSunLines(data);
       }
     } catch (e) {
       if (agendaTtDateObj && toDateStr(agendaTtDateObj) === dateStr) {
-        body.innerHTML = '<div class="lib-empty">Impossible de charger le programme.</div>';
+        lanes.innerHTML = '<div class="lib-empty">Impossible de charger le programme.</div>';
       }
     }
   }
+
+  // Calcule le zoom qui fait tenir la timeline agenda dans l'espace visible.
+  function computeAgendaFitZoom(data) {
+    const wrap = document.getElementById('agendaTlWrap');
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const totalMin = (end - start) / 60000;
+    if (!totalMin || totalMin <= 0) return 1;
+
+    const navH = bottomNav ? bottomNav.offsetHeight : 0;
+    const wrapTop = wrap.getBoundingClientRect().top;
+    const buffer = 20;
+    const availableHeight = Math.max(window.innerHeight - wrapTop - navH - buffer, 100);
+
+    const fit = (availableHeight - 20) / (totalMin * BASE_PX_PER_MIN);
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  }
+
+  function renderAgendaTimeline(data) {
+    const hours = document.getElementById('agendaTlHours');
+    const lanesScroll = document.getElementById('agendaTlLanesScroll');
+    const lanes = document.getElementById('agendaTlLanes');
+    const wrap = document.getElementById('agendaTlWrap');
+    hours.innerHTML = '';
+    lanes.innerHTML = '';
+
+    if (agendaZoomMode === 'auto') {
+      agendaZoomLevel = computeAgendaFitZoom(data);
+    }
+    const fitBtn = document.getElementById('agendaZoomFit');
+    if (fitBtn) fitBtn.classList.toggle('active', agendaZoomMode === 'auto');
+
+    const pxPerMin = BASE_PX_PER_MIN * agendaZoomLevel;
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const totalMin = (end - start) / 60000;
+    const totalPx = Math.max(totalMin * pxPerMin, 300);
+    const hourPx = 60 * pxPerMin;
+
+    hours.style.height = `${totalPx}px`;
+    lanes.style.height = `${totalPx}px`;
+    wrap.style.height = `${totalPx + 15}px`;
+
+    let tickMinutes = 60;
+    if (hourPx >= 260) tickMinutes = 15;
+    else if (hourPx >= 130) tickMinutes = 30;
+    else if (hourPx < 34) tickMinutes = 120;
+    lanes.style.backgroundSize = `100% ${tickMinutes * pxPerMin}px`;
+
+    const firstTick = new Date(start);
+    const rem = firstTick.getMinutes() % tickMinutes;
+    firstTick.setSeconds(0, 0);
+    if (rem !== 0) firstTick.setMinutes(firstTick.getMinutes() + (tickMinutes - rem));
+    else if (firstTick.getTime() < start) firstTick.setMinutes(firstTick.getMinutes() + tickMinutes);
+
+    for (let t = firstTick.getTime(); t <= end; t += tickMinutes * 60000) {
+      const topPx = ((t - start) / 60000) * pxPerMin;
+      const label = document.createElement('div');
+      label.className = 'tl-hour-label';
+      if (tickMinutes < 60 && new Date(t).getMinutes() !== 0) label.classList.add('tl-hour-label-minor');
+      label.style.top = `${topPx}px`;
+      label.textContent = new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      hours.appendChild(label);
+    }
+
+    const laneCount = Math.max(data.lane_count || 1, 1);
+    const availableWidth = lanesScroll.clientWidth || 300;
+    const laneWidth = availableWidth / laneCount;
+    const narrow = laneWidth < 64;
+
+    for (let i = 0; i < laneCount; i++) {
+      const col = document.createElement('div');
+      col.className = 'lane-col';
+      col.style.left = `${i * laneWidth}px`;
+      col.style.width = `${laneWidth}px`;
+      lanes.appendChild(col);
+    }
+
+    data.objects.forEach((o) => {
+      const rise = new Date(o.rise_iso).getTime();
+      const set = new Date(o.set_iso).getTime();
+      const topPx = ((rise - start) / 60000) * pxPerMin;
+      const heightPx = Math.max(((set - rise) / 60000) * pxPerMin, 22);
+
+      const fav = isFavorite(o.name);
+      const block = document.createElement('div');
+      block.className = 'block' + (narrow ? ' block-narrow' : '') + (fav ? ' block-favorite' : '');
+      block.style.top = `${topPx}px`;
+      block.style.height = `${heightPx}px`;
+      block.style.left = `${o.lane * laneWidth + 2}px`;
+      block.style.width = `${Math.max(laneWidth - 4, 4)}px`;
+      block.style.background = o.color;
+
+      const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '';
+      const subLine = narrow ? '' : `<span class="b-sub">${o.peak_altitude}° ${magStr}</span>`;
+      const favBadge = fav ? `<span class="b-fav">★</span>` : '';
+      block.innerHTML = `${favBadge}<span class="b-name">${o.name}</span>${subLine}`;
+      block.title = `${o.name} — ${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}, alt ${o.peak_altitude}°${magStr ? ', ' + magStr : ''}`;
+      block.addEventListener('click', () => openInfo(o));
+
+      lanes.appendChild(block);
+    });
+
+    const pctEl = document.getElementById('agendaZoomPct');
+    if (pctEl) pctEl.textContent = `${Math.round(agendaZoomLevel * 100)}%`;
+  }
+
+  function positionAgendaNowLine(data) {
+    const nowLine = document.getElementById('agendaNowLine');
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const now = Date.now();
+    if (now < start || now > end) {
+      nowLine.style.display = 'none';
+      return;
+    }
+    nowLine.style.display = 'block';
+    const pxPerMin = BASE_PX_PER_MIN * agendaZoomLevel;
+    nowLine.style.top = `${((now - start) / 60000) * pxPerMin}px`;
+  }
+
+  function positionAgendaSunLines(data) {
+    const sunsetLine = document.getElementById('agendaSunsetLine');
+    const sunriseLine = document.getElementById('agendaSunriseLine');
+    const pxPerMin = BASE_PX_PER_MIN * agendaZoomLevel;
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const sunset = new Date(data.sunset).getTime();
+    const sunrise = new Date(data.sunrise).getTime();
+
+    [
+      [sunsetLine, sunset],
+      [sunriseLine, sunrise],
+    ].forEach(([el, t]) => {
+      if (t < start || t > end) {
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = 'block';
+      el.style.top = `${((t - start) / 60000) * pxPerMin}px`;
+    });
+  }
+
+  function setAgendaZoom(newZoom) {
+    if (!agendaTtData) return;
+    agendaZoomMode = 'manual';
+    agendaZoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
+    renderAgendaTimeline(agendaTtData);
+    positionAgendaNowLine(agendaTtData);
+    positionAgendaSunLines(agendaTtData);
+  }
+
+  function resetAgendaZoomToFit() {
+    if (!agendaTtData) return;
+    agendaZoomMode = 'auto';
+    renderAgendaTimeline(agendaTtData);
+    positionAgendaNowLine(agendaTtData);
+    positionAgendaSunLines(agendaTtData);
+  }
+
+  document.getElementById('agendaZoomIn').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    setAgendaZoom(agendaZoomLevel + ZOOM_STEP);
+  });
+  document.getElementById('agendaZoomOut').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    setAgendaZoom(agendaZoomLevel - ZOOM_STEP);
+  });
+  document.getElementById('agendaZoomFit').addEventListener('click', (e) => {
+    e.currentTarget.blur();
+    resetAgendaZoomToFit();
+  });
 
   document.getElementById('agendaTtPrev').addEventListener('click', () => {
     if (!agendaTtDateObj || agendaTtDateObj <= today0) return;

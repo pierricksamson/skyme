@@ -181,15 +181,25 @@
             <button id="agendaTtNext" class="cal-nav-btn" title="Next day">›</button>
             <button id="agendaTtClose" class="info-close" title="Fermer">✕</button>
           </div>
-          <div class="schedule-table">
-            <div class="schedule-row schedule-header">
-              <span>Object</span>
-              <span>Rise</span>
-              <span>Set</span>
-              <span>Duration</span>
-              <span>Alt / Mag</span>
+          <div class="tl-meta">
+            <span></span>
+            <div class="tl-meta-right">
+              <div class="zoom-ctrl">
+                <button id="agendaZoomFit" class="zoom-btn zoom-fit-btn" title="Reset zoom (fit content)">⤢</button>
+                <button id="agendaZoomOut" class="zoom-btn" title="Zoom out">–</button>
+                <span id="agendaZoomPct" class="zoom-pct">100%</span>
+                <button id="agendaZoomIn" class="zoom-btn" title="Zoom in">+</button>
+              </div>
             </div>
-            <div id="agendaTtBody"></div>
+          </div>
+          <div id="agendaTlWrap" class="tl-wrap">
+            <div id="agendaTlHours" class="tl-hours"></div>
+            <div id="agendaTlLanesScroll" class="tl-lanes-scroll">
+              <div id="agendaTlLanes" class="tl-lanes"></div>
+            </div>
+            <div id="agendaSunsetLine" class="sun-line sun-line-sunset"></div>
+            <div id="agendaSunriseLine" class="sun-line sun-line-sunrise"></div>
+            <div id="agendaNowLine" class="now-line"></div>
           </div>
         </div>
       </section>
