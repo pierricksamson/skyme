@@ -355,6 +355,7 @@ function refreshSharedFilterViews() {
   function showAppShell() {
     statusPanel.classList.add('hidden');
     errorPanel.classList.add('hidden');
+    confirmPanel.classList.add('hidden');
     mainContent.classList.remove('hidden');
     bottomNav.classList.remove('hidden');
   }
@@ -2020,14 +2021,20 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     markSettingsDirty();
   });
 
-  // Carte de sélection : Leaflet + tuiles OpenStreetMap (gratuit, sans clé API).
+ // Carte de sélection : Leaflet + tuiles OpenStreetMap (gratuit, sans clé API).
+  // Réutilisée à la fois par Paramètres (target='settings') et par l'écran
+  // de confirmation au démarrage (target='confirm').
   let pickerMap = null;
   let pickerMarker = null;
+  let mapPickerTarget = 'settings';
 
-  function openMapPicker() {
+  function openMapPicker(target = 'settings') {
+    mapPickerTarget = target;
     mapOverlay.classList.remove('hidden');
-    const fallbackLat = parseFloat(locLatInput.value) || currentLat || 48.8566;
-    const fallbackLon = parseFloat(locLonInput.value) || currentLon || 2.3522;
+    const latInput = target === 'confirm' ? confirmLocLatInput : locLatInput;
+    const lonInput = target === 'confirm' ? confirmLocLonInput : locLonInput;
+    const fallbackLat = parseFloat(latInput.value) || currentLat || 48.8566;
+    const fallbackLon = parseFloat(lonInput.value) || currentLon || 2.3522;
 
     if (!pickerMap) {
       pickerMap = L.map('mapPicker').setView([fallbackLat, fallbackLon], 6);
@@ -2049,7 +2056,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     mapOverlay.classList.add('hidden');
   }
 
-  locMapBtn.addEventListener('click', openMapPicker);
+  locMapBtn.addEventListener('click', () => openMapPicker('settings'));
   mapClose.addEventListener('click', closeMapPicker);
   mapOverlay.addEventListener('click', (e) => {
     if (e.target.id === 'mapOverlay') closeMapPicker();
@@ -2057,10 +2064,128 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   mapValidate.addEventListener('click', () => {
     if (!pickerMarker) return;
     const { lat, lng } = pickerMarker.getLatLng();
-    locLatInput.value = lat.toFixed(4);
-    locLonInput.value = lng.toFixed(4);
-    setLocationManual();
+    if (mapPickerTarget === 'confirm') {
+      confirmLocLatInput.value = lat.toFixed(4);
+      confirmLocLonInput.value = lng.toFixed(4);
+      confirmLocAutoToggle.checked = false;
+      confirmLocManualBlock.classList.remove('hidden');
+    } else {
+      locLatInput.value = lat.toFixed(4);
+      locLonInput.value = lng.toFixed(4);
+      setLocationManual();
+    }
     closeMapPicker();
+  });
+
+  // ---------- Écran de confirmation des paramètres (uniquement à
+  // l'ouverture de l'application, pas lors d'un simple "reload" via le
+  // bouton ⟳ ou "Try again", qui appellent resolveLocation() directement). ----------
+  const confirmPanel = document.getElementById('confirmPanel');
+  const confirmError = document.getElementById('confirmError');
+  const confirmStartBtn = document.getElementById('confirmStartBtn');
+  const confirmLocAutoToggle = document.getElementById('confirmLocAutoToggle');
+  const confirmLocManualBlock = document.getElementById('confirmLocManualBlock');
+  const confirmLocMapBtn = document.getElementById('confirmLocMapBtn');
+  const confirmLocLatInput = document.getElementById('confirmLocLatInput');
+  const confirmLocLonInput = document.getElementById('confirmLocLonInput');
+  const confirmLocElevInput = document.getElementById('confirmLocElevInput');
+  const confirmModeMargin = document.getElementById('confirmModeMargin');
+  const confirmModeFixed = document.getElementById('confirmModeFixed');
+  const confirmMarginInput = document.getElementById('confirmMarginInput');
+  const confirmFixedStartInput = document.getElementById('confirmFixedStartInput');
+  const confirmFixedEndInput = document.getElementById('confirmFixedEndInput');
+  const confirmMinAltInput = document.getElementById('confirmMinAltInput');
+
+  function populateConfirmPanel() {
+    const auto = settingsCache.loc_mode !== 'manual';
+    confirmLocAutoToggle.checked = auto;
+    confirmLocManualBlock.classList.toggle('hidden', auto);
+
+    if (settingsCache.loc_lat !== null && settingsCache.loc_lat !== undefined) {
+      confirmLocLatInput.value = settingsCache.loc_lat;
+    }
+    if (settingsCache.loc_lon !== null && settingsCache.loc_lon !== undefined) {
+      confirmLocLonInput.value = settingsCache.loc_lon;
+    }
+    confirmLocElevInput.value = (settingsCache.loc_elev !== null && settingsCache.loc_elev !== undefined)
+      ? settingsCache.loc_elev : 0;
+
+    const mode = settingsCache.pref_mode === 'fixed' ? 'fixed' : 'margin';
+    confirmModeFixed.checked = mode === 'fixed';
+    confirmModeMargin.checked = mode !== 'fixed';
+    confirmMarginInput.value = settingsCache.pref_margin !== undefined && settingsCache.pref_margin !== null
+      ? settingsCache.pref_margin : 30;
+    confirmFixedStartInput.value = settingsCache.pref_fixed_start || '20:00';
+    confirmFixedEndInput.value = settingsCache.pref_fixed_end || '06:00';
+    onConfirmModeChange();
+
+    confirmMinAltInput.value = (settingsCache.pref_min_alt !== null && settingsCache.pref_min_alt !== undefined)
+      ? settingsCache.pref_min_alt : 10;
+  }
+
+  function onConfirmModeChange() {
+    const fixed = confirmModeFixed.checked;
+    confirmMarginInput.disabled = fixed;
+    confirmFixedStartInput.disabled = !fixed;
+    confirmFixedEndInput.disabled = !fixed;
+  }
+
+  confirmLocAutoToggle.addEventListener('change', () => {
+    confirmLocManualBlock.classList.toggle('hidden', confirmLocAutoToggle.checked);
+  });
+  confirmModeFixed.addEventListener('change', onConfirmModeChange);
+  confirmModeMargin.addEventListener('change', onConfirmModeChange);
+  confirmLocMapBtn.addEventListener('click', () => openMapPicker('confirm'));
+
+  function showConfirmError(msg) {
+    confirmError.textContent = msg;
+    confirmError.classList.remove('hidden');
+  }
+  function hideConfirmError() {
+    confirmError.classList.add('hidden');
+  }
+
+  confirmStartBtn.addEventListener('click', async () => {
+    hideConfirmError();
+    const auto = confirmLocAutoToggle.checked;
+
+    let margin = parseInt(confirmMarginInput.value, 10);
+    if (isNaN(margin) || margin < 0) margin = 0;
+    let minAltVal = parseFloat(confirmMinAltInput.value);
+    if (isNaN(minAltVal) || minAltVal < 0) minAltVal = 0;
+    if (minAltVal > 90) minAltVal = 90;
+
+    const updates = {
+      loc_mode: auto ? 'auto' : 'manual',
+      pref_mode: confirmModeFixed.checked ? 'fixed' : 'margin',
+      pref_margin: margin,
+      pref_fixed_start: confirmFixedStartInput.value || '20:00',
+      pref_fixed_end: confirmFixedEndInput.value || '06:00',
+      pref_min_alt: minAltVal,
+    };
+
+    if (!auto) {
+      const lat = parseFloat(confirmLocLatInput.value);
+      const lon = parseFloat(confirmLocLonInput.value);
+      if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lon) || lon < -180 || lon > 180) {
+        showConfirmError('Latitude ou longitude invalide.');
+        return;
+      }
+      let elev = parseFloat(confirmLocElevInput.value);
+      if (isNaN(elev)) elev = 0;
+      updates.loc_lat = lat;
+      updates.loc_lon = lon;
+      updates.loc_elev = elev;
+    }
+
+    confirmStartBtn.disabled = true;
+    confirmStartBtn.textContent = 'Chargement…';
+
+    await saveSettings(updates);
+
+    confirmPanel.classList.add('hidden');
+    statusPanel.classList.remove('hidden');
+    await runLoadSequence();
   });
 
   // ---------- Favoris (persistés côté serveur) ----------
@@ -3540,16 +3665,36 @@ document.addEventListener('click', (e) => {
     polarTimer = setInterval(drawPolarClock, 15000);
   }
 
+// ---------- Bootstrap ----------
+  // Au premier chargement (ouverture de l'application), on affiche d'abord
+  // un écran de confirmation des paramètres (localisation / plage horaire /
+  // altitude minimale) avant de lancer le calcul. Ce comportement ne
+  // s'applique qu'à l'ouverture : le bouton ⟳ (refreshBtn) et "Try again"
+  // (retryBtn) appellent resolveLocation() directement et ne repassent pas
+  // par cet écran.
+  async function bootstrapConfirmFlow() {
+    statusPanel.classList.remove('hidden');
+    setStatus('Chargement des paramètres…');
+    setProgress(10);
+    try { await loadSettingsFromServer(); } catch (e) { /* valeurs par défaut conservées */ }
+    try { await loadFavorites(); } catch (e) { /* best effort */ }
+
+    populateConfirmPanel();
+    confirmStartBtn.disabled = false;
+    confirmStartBtn.textContent = 'Commencer';
+    statusPanel.classList.add('hidden');
+    confirmPanel.classList.remove('hidden');
+  }
+
   // Écran de chargement : l'app ne s'ouvre qu'une fois TOUT reçu, y compris
   // la bibliothèque (horaires lever/coucher de chaque objet) et les stats
   // du catalogue. Chaque étape avance la barre de progression ; une fois
   // toutes les étapes terminées, on révèle l'app d'un coup — plus aucune
   // surprise ensuite tant que les réglages ne sont pas explicitement
-  // sauvegardés (voir commitSettingsAndReload).
-  async function initApp() {
+  // sauvegardés (voir commitSettingsAndReload). Appelé une fois les
+  // paramètres confirmés par l'utilisateur (voir confirmStartBtn ci-dessus).
+  async function runLoadSequence() {
     const steps = [
-      ['Chargement des réglages…', loadSettingsFromServer],
-      ['Chargement des favoris…', loadFavorites],
       ['Localisation…', async () => {
         const loc = await getInitialLocation();
         if (loc) {
@@ -3572,6 +3717,7 @@ document.addEventListener('click', (e) => {
       ['Chargement du journal…', loadJournal],
     ];
 
+    setProgress(0);
     for (let i = 0; i < steps.length; i++) {
       const [label, fn] = steps[i];
       setStatus(label);
@@ -3619,7 +3765,7 @@ document.addEventListener('click', (e) => {
   return 'failed';
 }
   switchView('overview')
-  initApp();
+  bootstrapConfirmFlow();
   resetZoomToFit();
 })();
 
