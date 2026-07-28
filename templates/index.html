@@ -85,7 +85,30 @@
       </section>
 
       <section id="view-schedule" class="view hidden">
-        <div class="section-heading"><h2>Observation Schedule</h2></div>
+        <div class="section-heading">
+          <h2>Observation Schedule</h2>
+          <button id="scheduleFilterBtn" class="icon-btn tl-filter-btn" title="Filtrer">
+            <i class='bx bx-filter-alt'></i>
+          </button>
+        </div>
+        <div id="scheduleFilterPanel" class="tl-filter-panel hidden">
+          <div class="tl-filter-chips">
+            <button type="button" class="lib-chip schedule-filter-chip active" data-cat="all">Tout</button>
+            <button type="button" class="lib-chip schedule-filter-chip lib-chip-fav" data-cat="favorites">★ Favoris</button>
+            <button type="button" class="lib-chip schedule-filter-chip" data-cat="moon">Lune</button>
+            <button type="button" class="lib-chip schedule-filter-chip" data-cat="planet">Planètes</button>
+            <button type="button" class="lib-chip schedule-filter-chip" data-cat="star">Étoiles</button>
+            <button type="button" class="lib-chip schedule-filter-chip" data-cat="galaxy">Galaxies</button>
+            <button type="button" class="lib-chip schedule-filter-chip" data-cat="nebula">Nébuleuses</button>
+            <button type="button" class="lib-chip schedule-filter-chip" data-cat="cluster">Amas</button>
+          </div>
+          <div class="tl-filter-mag-row">
+            <label for="scheduleFilterMag">Magnitude max</label>
+            <input type="number" id="scheduleFilterMag" step="0.1" placeholder="Aucune limite">
+            <button type="button" id="scheduleFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
+          </div>
+          <p id="scheduleFilterCount" class="tl-filter-count"></p>
+        </div>
         <div class="schedule-table">
           <div class="schedule-row schedule-header">
             <span>Object</span>

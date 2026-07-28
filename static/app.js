@@ -98,12 +98,58 @@ function assignLanesClient(objects) {
   return { laneOf, laneCount: laneEndTimes.length };
 }
 
-  function wireFilterPanel({ toggleBtnId, panelId, chipSelector, magInputId, magClearId, countId, filterState, onChange }) {
+function refreshSharedFilterViews() {
+    if (!currentData) return;
+    renderTimeline(currentData, false);
+    renderSchedule(currentData);
+  }
+
+  wireFilterPanel({
+    toggleBtnId: 'tlFilterBtn',
+    panelId: 'tlFilterPanel',
+    chipSelector: '.tl-filter-chip',
+    magInputId: 'tlFilterMag',
+    magClearId: 'tlFilterMagClear',
+    countId: 'tlFilterCount',
+    filterState: tlFilterState,
+    onChange: refreshSharedFilterViews,
+    linkedChipSelectors: ['.schedule-filter-chip'],
+    linkedMagInputIds: ['scheduleFilterMag'],
+  });
+
+  wireFilterPanel({
+    toggleBtnId: 'scheduleFilterBtn',
+    panelId: 'scheduleFilterPanel',
+    chipSelector: '.schedule-filter-chip',
+    magInputId: 'scheduleFilterMag',
+    magClearId: 'scheduleFilterMagClear',
+    countId: 'scheduleFilterCount',
+    filterState: tlFilterState,
+    onChange: refreshSharedFilterViews,
+    linkedChipSelectors: ['.tl-filter-chip'],
+    linkedMagInputIds: ['tlFilterMag'],
+  });
+
+  wireFilterPanel({
+    toggleBtnId: 'agendaFilterBtn',
+    panelId: 'agendaFilterPanel',
+    chipSelector: '.agenda-filter-chip',
+    magInputId: 'agendaFilterMag',
+    magClearId: 'agendaFilterMagClear',
+    countId: 'agendaFilterCount',
+    filterState: agendaFilterState,
+    onChange: () => { if (agendaTtData) renderAgendaTimeline(agendaTtData, false); },
+  });
+
+  function wireFilterPanel({ toggleBtnId, panelId, chipSelector, magInputId, magClearId, countId, filterState, onChange, linkedChipSelectors = [], linkedMagInputIds = [] }) {
     const toggleBtn = document.getElementById(toggleBtnId);
     const panel = document.getElementById(panelId);
     const magInput = document.getElementById(magInputId);
     const magClear = document.getElementById(magClearId);
     if (!toggleBtn || !panel) return;
+
+    const allChipSelectors = [chipSelector, ...linkedChipSelectors];
+    const allMagInputIds = [magInputId, ...linkedMagInputIds];
 
     toggleBtn.addEventListener('click', () => {
       panel.classList.toggle('hidden');
@@ -113,7 +159,9 @@ function assignLanesClient(objects) {
     document.querySelectorAll(chipSelector).forEach((chip) => {
       chip.addEventListener('click', () => {
         filterState.cat = chip.dataset.cat;
-        document.querySelectorAll(chipSelector).forEach((c) => c.classList.toggle('active', c === chip));
+        allChipSelectors.forEach((sel) => {
+          document.querySelectorAll(sel).forEach((c) => c.classList.toggle('active', c.dataset.cat === filterState.cat));
+        });
         onChange();
       });
     });
@@ -122,13 +170,21 @@ function assignLanesClient(objects) {
       magInput.addEventListener('input', () => {
         const v = parseFloat(magInput.value);
         filterState.maxMag = magInput.value === '' || isNaN(v) ? null : v;
+        allMagInputIds.forEach((id) => {
+          if (id === magInputId) return;
+          const el = document.getElementById(id);
+          if (el) el.value = magInput.value;
+        });
         onChange();
       });
     }
     if (magClear) {
       magClear.addEventListener('click', () => {
         filterState.maxMag = null;
-        if (magInput) magInput.value = '';
+        allMagInputIds.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) el.value = '';
+        });
         onChange();
       });
     }
@@ -817,7 +873,11 @@ function assignLanesClient(objects) {
     const body = document.getElementById(bodyId);
     if (!body) return;
     body.innerHTML = '';
-    data.objects.forEach((o) => {
+
+    const visibleObjects = filterObjects(data.objects, tlFilterState);
+    updateFilterCount('scheduleFilterCount', data.objects.length, visibleObjects.length);
+
+    visibleObjects.forEach((o) => {
       const row = document.createElement('div');
       row.className = 'schedule-row schedule-row-clickable';
       const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
