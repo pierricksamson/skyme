@@ -48,7 +48,7 @@
   // N'affecte que le rendu des blocs (le layout des voies reste basé sur
   // data.lane_count / o.lane calculés côté serveur, ce qui évite de tout
   // recalculer côté client à chaque changement de filtre).
-  const tlFilterState = { cat: 'all', maxMag: null };
+  const tlFilterState = { cat: 'all', maxMag: null, journal: 'all' };
 
   function objectPassesFilter(o, filterState) {
     if (filterState.cat === 'favorites') {
@@ -59,6 +59,9 @@
     if (filterState.maxMag !== null && !isNaN(filterState.maxMag)) {
       if (o.magnitude === null || o.magnitude === undefined) return false;
       if (o.magnitude > filterState.maxMag) return false;
+    }
+    if (filterState.journal && filterState.journal !== 'all') {
+    if (getObjectJournalStatus(o.name) !== filterState.journal) return false;
     }
     return true;
   }
@@ -2191,6 +2194,12 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       } else if (libActiveCategory !== 'all' && o.category !== libActiveCategory) {
         return false;
       }
+      
+      // NOUVEAU : Filtre par journal
+      if (typeof libActiveJournal !== 'undefined' && libActiveJournal !== 'all') {
+        if (getObjectJournalStatus(o.name) !== libActiveJournal) return false;
+      }
+
       if (term && !normalizeSearch(o.name).includes(term)) return false;
       return true;
     });
@@ -2500,6 +2509,53 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       </div>
     `;
   }
+  // --- Câblage des puces de filtrage du Journal ---
+
+  // 1. Timeline & Schedule (Partagent le même tlFilterState)
+  document.querySelectorAll('.tl-journal-chip, .schedule-journal-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      tlFilterState.journal = chip.dataset.journal;
+      document.querySelectorAll('.tl-journal-chip, .schedule-journal-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.journal === tlFilterState.journal);
+      });
+      refreshSharedFilterViews();
+    });
+  });
+
+  // 2. Agenda
+  document.querySelectorAll('.agenda-journal-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      agendaFilterState.journal = chip.dataset.journal;
+      document.querySelectorAll('.agenda-journal-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.journal === agendaFilterState.journal);
+      });
+      if (agendaTtData) renderAgendaTimeline(agendaTtData, false);
+    });
+  });
+
+  // 3. Bibliothèque
+  window.libActiveJournal = 'all'; // Déclaré sur window ou au niveau module pour être lu par renderLibraryList
+  document.querySelectorAll('.lib-journal-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      libActiveJournal = chip.dataset.journal;
+      document.querySelectorAll('.lib-journal-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.journal === libActiveJournal);
+      });
+      renderLibraryList();
+    });
+  });
+
+  // 4. Prévoir (Plan)
+  window.planCatalogJournal = 'all'; // Pareil
+  document.querySelectorAll('.plan-journal-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      planCatalogJournal = chip.dataset.journal;
+      document.querySelectorAll('.plan-journal-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.journal === planCatalogJournal);
+      });
+      renderPlanCatalogList();
+    });
+  });
 
   async function renderPlanCatalogList() {
     const listEl = document.getElementById('planCatalogList');
@@ -2512,6 +2568,12 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const term = normalizeSearch(planCatalogSearch.trim());
     const filtered = items.filter((o) => {
       if (planCatalogFilter !== 'all' && o.category !== planCatalogFilter) return false;
+      
+      // NOUVEAU : Filtre par journal
+      if (typeof planCatalogJournal !== 'undefined' && planCatalogJournal !== 'all') {
+        if (getObjectJournalStatus(o.name) !== planCatalogJournal) return false;
+      }
+
       if (term && !normalizeSearch(o.name).includes(term)) return false;
       return true;
     });
@@ -3551,6 +3613,16 @@ document.addEventListener('click', (e) => {
     renderOverviewFavorites();
     startLibraryCountdownTimer();
   }
+  function getObjectJournalStatus(name) {
+  if (!journalEntries || journalEntries.length === 0) return 'unattempted';
+  // Trouve toutes les entrées du journal pour cet objet
+  const entries = journalEntries.filter(e => e.object_name === name);
+  if (entries.length === 0) return 'unattempted';
+  // Si au moins une entrée est marquée 'seen', on considère l'objet comme vu
+  if (entries.some(e => e.status === 'seen')) return 'seen';
+  // Sinon (il n'a que des entrées 'failed'), c'est un échec
+  return 'failed';
+}
   initApp();
   resetZoomToFit();
 })();
@@ -3558,3 +3630,4 @@ document.addEventListener('click', (e) => {
 function loadingBlockHtml(msg, abs = false) {
   return `<div class="locked-state${abs ? ' locked-state-abs' : ''}"><div class="spinner"></div><p>${msg}</p></div>`;
 }
+

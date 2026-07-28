@@ -71,6 +71,13 @@
             <input type="number" id="tlFilterMag" step="0.1" placeholder="Aucune limite">
             <button type="button" id="tlFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
           </div>
+          <label style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 4px;">Journal d'observation</label>
+<div class="tl-filter-chips" style="margin-bottom: 8px;">
+  <button type="button" class="lib-chip tl-journal-chip active" data-journal="all">Tout</button>
+  <button type="button" class="lib-chip tl-journal-chip" data-journal="seen">Vu</button>
+  <button type="button" class="lib-chip tl-journal-chip" data-journal="failed">Échec</button>
+  <button type="button" class="lib-chip tl-journal-chip" data-journal="unattempted">Pas tenté</button>
+</div>
           <p id="tlFilterCount" class="tl-filter-count"></p>
         </div>
         <div id="tlWrap" class="tl-wrap">
@@ -107,6 +114,13 @@
             <input type="number" id="scheduleFilterMag" step="0.1" placeholder="Aucune limite">
             <button type="button" id="scheduleFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
           </div>
+          <label style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 4px;">Journal d'observation</label>
+<div class="tl-filter-chips" style="margin-bottom: 8px;">
+  <button type="button" class="lib-chip schedule-journal-chip active" data-journal="all">Tout</button>
+  <button type="button" class="lib-chip schedule-journal-chip" data-journal="seen">Vu</button>
+  <button type="button" class="lib-chip schedule-journal-chip" data-journal="failed">Échec</button>
+  <button type="button" class="lib-chip schedule-journal-chip" data-journal="unattempted">Pas tenté</button>
+</div>
           <p id="scheduleFilterCount" class="tl-filter-count"></p>
         </div>
         <div class="schedule-table">
@@ -265,6 +279,13 @@
               <input type="number" id="agendaFilterMag" step="0.1" placeholder="Aucune limite">
               <button type="button" id="agendaFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
             </div>
+            <label style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 4px;">Journal d'observation</label>
+<div class="tl-filter-chips" style="margin-bottom: 8px;">
+  <button type="button" class="lib-chip agenda-journal-chip active" data-journal="all">Tout</button>
+  <button type="button" class="lib-chip agenda-journal-chip" data-journal="seen">Vu</button>
+  <button type="button" class="lib-chip agenda-journal-chip" data-journal="failed">Échec</button>
+  <button type="button" class="lib-chip agenda-journal-chip" data-journal="unattempted">Pas tenté</button>
+</div>
             <p id="agendaFilterCount" class="tl-filter-count"></p>
           </div>
           <div id="agendaTlWrap" class="tl-wrap">
@@ -322,6 +343,12 @@
             <button type="button" class="lib-chip plan-filter-chip" data-cat="nebula">Nébuleuses</button>
             <button type="button" class="lib-chip plan-filter-chip" data-cat="cluster">Amas</button>
           </div>
+          <div class="lib-filter-chips" style="margin-top: -2px;">
+  <button type="button" class="lib-chip plan-journal-chip active" data-journal="all">Observation : Tout</button>
+  <button type="button" class="lib-chip plan-journal-chip" data-journal="seen">Vu</button>
+  <button type="button" class="lib-chip plan-journal-chip" data-journal="failed">Échec</button>
+  <button type="button" class="lib-chip plan-journal-chip" data-journal="unattempted">Pas tenté</button>
+</div>
           <div id="planCatalogList" class="lib-list"></div>
         </div>
 
