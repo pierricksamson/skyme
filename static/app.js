@@ -1943,6 +1943,10 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       // dernières valeurs connues côté serveur
     }
 
+    // On vient de sauvegarder explicitement depuis l'écran Paramètres :
+    // pas besoin de repasser par l'écran de confirmation au reload qui suit.
+    try { sessionStorage.setItem('skyme_skip_confirm', '1'); } catch (e) { /* ignore */ }
+
     location.reload();
   }
 
@@ -3742,6 +3746,17 @@ document.addEventListener('click', (e) => {
     setProgress(10);
     try { await loadSettingsFromServer(); } catch (e) { /* valeurs par défaut conservées */ }
     try { await loadFavorites(); } catch (e) { /* best effort */ }
+
+    // Si ce reload fait suite à un enregistrement explicite depuis l'écran
+    // Paramètres (commitSettingsAndReload), on ne redemande pas confirmation :
+    // les valeurs viennent d'être validées par l'utilisateur.
+    let skipConfirm = false;
+    try { skipConfirm = sessionStorage.getItem('skyme_skip_confirm') === '1'; } catch (e) { /* ignore */ }
+    if (skipConfirm) {
+      try { sessionStorage.removeItem('skyme_skip_confirm'); } catch (e) { /* ignore */ }
+      await runLoadSequence();
+      return;
+    }
 
     populateConfirmPanel();
     confirmStartBtn.disabled = false;
