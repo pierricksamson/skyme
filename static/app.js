@@ -373,7 +373,7 @@ function refreshSharedFilterViews() {
   function renderNoLocation(msg) {
     currentData = null;
     if (nowLineTimer) { clearInterval(nowLineTimer); nowLineTimer = null; }
-
+    document.getElementById('tlHours').style.display = 'none';
     document.getElementById('tlDate').textContent = '—';
     document.getElementById('tlHours').innerHTML = '';
     const tlWrap = document.getElementById('tlWrap');
@@ -415,7 +415,7 @@ function refreshSharedFilterViews() {
   function resolveLocation() {
     showAppShell();
     const auto = settingsCache.loc_mode !== 'manual';
-
+    document.getElementById('tlHours').style.display = 'flex';
     if (!auto) {
       const lat = parseFloat(settingsCache.loc_lat);
       const lon = parseFloat(settingsCache.loc_lon);
