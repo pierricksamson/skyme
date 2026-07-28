@@ -25,7 +25,8 @@
   --nav-h: 74px;
 }
 
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; scrollbar-width: none;}
+*::-webkit-scrollbar { display: none; } 
 
 html, body {
   margin: 0;
@@ -1931,10 +1932,18 @@ body.red-filter::after {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  scrollbar-width: none; /* Firefox */
 }
 .agenda-day-panel-body .agenda-fav-list {
   max-height: none;
 }
+
+.agenda-day-panel-body::-webkit-scrollbar{
+    display: none; /* Chrome, Edge, Safari */
+}
+
+
+
 .agenda-day-panel-body .locked-state {
   flex: 1;
   padding: 20px 10px;

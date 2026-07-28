@@ -12,7 +12,7 @@
   const retryBtn = document.getElementById('retryBtn');
 
   const BASE_PX_PER_MIN = 2.4;
-  const ZOOM_MIN = 0.5;
+  const ZOOM_MIN = 0.25;
   const ZOOM_MAX = 3;
   const ZOOM_STEP = 0.25;
 
@@ -143,6 +143,7 @@ function assignLanesClient(objects) {
   }
 
   const AGENDA_DAYS = 30;
+  const AGENDA_DAYS_BACKWARD = 60;
 
   async function loadSettingsFromServer() {
     try {
@@ -196,6 +197,9 @@ function assignLanesClient(objects) {
   let agendaFavCounts = {}; // { 'YYYY-MM-DD': nombre d'objets favoris visibles ce soir-là }
   let journalEntries = [];
   let journalDatesSet = new Set(); // dates (YYYY-MM-DD) ayant au moins une entrée de journal
+
+  const agendaFirstDay = new Date(today0); // NOUVEAU
+  agendaFirstDay.setDate(agendaFirstDay.getDate() - AGENDA_DAYS_BACKWARD);
 
   function getObsMode() {
     return settingsCache.pref_mode || 'margin';
@@ -1191,7 +1195,7 @@ function assignLanesClient(objects) {
       const dateStr = toDateStr(d);
 
       const inMonth = d.getMonth() === monthStart.getMonth();
-      const inRange = d >= today0 && d <= agendaLastDay;
+      const inRange = d >= agendaFirstDay && d <= agendaLastDay;
       const isToday = d.getTime() === today0.getTime();
 
       const cell = document.createElement('button');
@@ -1223,8 +1227,8 @@ function assignLanesClient(objects) {
     }
 
     document.getElementById('agendaPrevMonth').disabled =
-      agendaViewMonth.getFullYear() === today0.getFullYear() &&
-      agendaViewMonth.getMonth() === today0.getMonth();
+  agendaViewMonth.getFullYear() === agendaFirstDay.getFullYear() &&
+  agendaViewMonth.getMonth() === agendaFirstDay.getMonth();
   }
 
   document.getElementById('agendaPrevMonth').addEventListener('click', () => {
@@ -1279,7 +1283,27 @@ function assignLanesClient(objects) {
         loadPlan(dateStr);
       };
     }
-    listEl.innerHTML = loadingBlockHtml('Chargement des favoris…');
+    listEl.innerHTML = loadingBlockHtml('Chargement…');
+
+    // Observations du journal pour ce jour (déjà en mémoire, pas de fetch)
+    const dayJournalEntries = journalEntries.filter((e) => e.date === dateStr);
+    const journalHtml = dayJournalEntries.length
+      ? `<div class="section-heading" style="margin:0 0 8px;"><h2 style="font-size:15px;">Observations</h2></div>` +
+        dayJournalEntries.map((e) => {
+          const color = CATEGORY_COLOR_VAR[e.category] || 'var(--text-muted)';
+          const statusLabel = e.status === 'failed' ? 'Échec' : 'Vu';
+          const statusClass = e.status === 'failed' ? 'journal-row-status-failed' : 'journal-row-status-seen';
+          const when = e.time ? e.time : '';
+          return `
+            <div class="agenda-fav-row">
+              <span class="agenda-fav-dot" style="background:${color}"></span>
+              <span class="agenda-fav-name">${e.object_name}</span>
+              ${when ? `<span class="agenda-fav-time">${when}</span>` : ''}
+              <span class="journal-row-status ${statusClass}">${statusLabel}</span>
+            </div>
+          `;
+        }).join('')
+      : '';
 
     try {
       const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
@@ -1287,24 +1311,24 @@ function assignLanesClient(objects) {
       if (!res.ok) throw new Error();
       const data = await res.json();
 
-      // On ignore la réponse si l'utilisateur a rouvert un autre jour entre-temps.
       if (!agendaPreviewDate || agendaPreviewDate.dateStr !== dateStr) return;
 
       const favs = (data.objects || []).filter((o) => o.favorite);
-      if (favs.length === 0) {
-        listEl.innerHTML = '<div class="lib-empty">Aucun favori visible cette nuit-là.</div>';
-      } else {
-        listEl.innerHTML = favs.map((o) => `
-          <div class="agenda-fav-row">
-            <span class="agenda-fav-dot" style="background:${o.color}"></span>
-            <span class="agenda-fav-name">${o.name}</span>
-            <span class="agenda-fav-time">${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}</span>
-          </div>
-        `).join('');
-      }
+      const favsHtml = favs.length
+        ? `<div class="section-heading" style="margin:${journalHtml ? '14px' : '0'} 0 8px;"><h2 style="font-size:15px;">Favoris visibles</h2></div>` +
+          favs.map((o) => `
+            <div class="agenda-fav-row">
+              <span class="agenda-fav-dot" style="background:${o.color}"></span>
+              <span class="agenda-fav-name">${o.name}</span>
+              <span class="agenda-fav-time">${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}</span>
+            </div>
+          `).join('')
+        : (journalHtml ? '' : '<div class="lib-empty">Aucun favori visible cette nuit-là.</div>');
+
+      listEl.innerHTML = (journalHtml + favsHtml) || '<div class="lib-empty">Rien à afficher pour cette nuit.</div>';
     } catch (e) {
       if (agendaPreviewDate && agendaPreviewDate.dateStr === dateStr) {
-        listEl.innerHTML = '<div class="lib-empty">Impossible de charger les favoris.</div>';
+        listEl.innerHTML = journalHtml || '<div class="lib-empty">Impossible de charger les favoris.</div>';
       }
     }
   }
