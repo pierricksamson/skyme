@@ -2014,3 +2014,26 @@ body.red-filter::after {
   box-shadow: inset 0 0 0 1.5px var(--accent);
   background: rgba(212,175,106,0.06);
 }
+
+.cal-legend { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.cal-legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.cal-legend-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.cal-legend-dot.cal-day-dot-plan { background: var(--c-galaxy); }
+.cal-legend-dot.cal-day-journal-dot { background: #4fae6c; }
+.cal-legend-star { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--accent); flex: none; }
+.cal-legend-star i { font-size: 12px; }
+
+.journal-name-combo { position: relative; }
+.journal-name-suggestions {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  max-height: 190px; overflow-y: auto;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); z-index: 15;
+}
+.journal-name-suggestion-item {
+  padding: 10px 14px; font-size: 13.5px; color: var(--text);
+  cursor: pointer; border-bottom: 1px solid var(--hairline);
+}
+.journal-name-suggestion-item:last-child { border-bottom: none; }
+.journal-name-suggestion-item:hover,
+.journal-name-suggestion-item.active { background: rgba(212,175,106,0.12); color: var(--accent); }

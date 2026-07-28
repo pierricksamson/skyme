@@ -1309,17 +1309,27 @@ function assignLanesClient(objects) {
     }
   }
 
-  function closeAgendaDayPreview() {
-    agendaPreviewDate = null;
-    document.getElementById('agendaDayTitle').textContent = 'Sélectionne une nuit';
-    document.getElementById('agendaDayClose').classList.add('hidden');
-    document.getElementById('agendaDayOpenBtn').classList.add('hidden');
-    const planBtn = document.getElementById('agendaDayPlanBtn');
-    if (planBtn) { planBtn.classList.add('hidden'); planBtn.onclick = null; }
-    document.getElementById('agendaDayFavList').innerHTML =
-      '<div class="locked-state"><p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p></div>';
-    renderAgendaCalendar();
-  }
+  function agendaEmptyStateHtml() {
+  return `<div class="locked-state">
+    <p>Sélectionne un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><span class="cal-legend-dot cal-day-dot-plan"></span>Plan enregistré</div>
+      <div class="cal-legend-item"><span class="cal-legend-dot cal-day-journal-dot"></span>Observations enregistrées</div>
+      <div class="cal-legend-item"><span class="cal-legend-star"><i class='bx bxs-star'></i></span>Favoris visibles cette nuit-là</div>
+    </div>
+  </div>`;
+}
+
+function closeAgendaDayPreview() {
+  agendaPreviewDate = null;
+  document.getElementById('agendaDayTitle').textContent = 'Sélectionne une nuit';
+  document.getElementById('agendaDayClose').classList.add('hidden');
+  document.getElementById('agendaDayOpenBtn').classList.add('hidden');
+  const planBtn = document.getElementById('agendaDayPlanBtn');
+  if (planBtn) { planBtn.classList.add('hidden'); planBtn.onclick = null; }
+  document.getElementById('agendaDayFavList').innerHTML = agendaEmptyStateHtml(); // <-- changé
+  renderAgendaCalendar();
+}
 
   document.getElementById('agendaDayClose').addEventListener('click', closeAgendaDayPreview);
 
@@ -2563,13 +2573,56 @@ function assignLanesClient(objects) {
     });
   }
 
-  async function populateJournalDatalist() {
-    const dl = document.getElementById('journalCatalogDatalist');
-    if (!dl || dl.childElementCount) return;
-    const items = await fetchCatalogListOnce();
-    if (!items) return;
-    dl.innerHTML = items.map((o) => `<option value="${o.name}">`).join('');
-  }
+
+let journalSuggestCatalog = null;
+
+async function ensureJournalSuggestCatalog() {
+  if (journalSuggestCatalog) return journalSuggestCatalog;
+  journalSuggestCatalog = (await fetchCatalogListOnce()) || [];
+  return journalSuggestCatalog;
+}
+
+function renderJournalNameSuggestions(term) {
+  const box = document.getElementById('journalNameSuggestions');
+  if (!box) return;
+  const norm = normalizeSearch((term || '').trim());
+  const filtered = (norm
+    ? (journalSuggestCatalog || []).filter((o) => normalizeSearch(o.name).includes(norm))
+    : (journalSuggestCatalog || [])
+  ).slice(0, 8);
+
+  if (filtered.length === 0) { box.innerHTML = ''; box.classList.add('hidden'); return; }
+  box.innerHTML = filtered.map((o) =>
+    `<div class="journal-name-suggestion-item" data-name="${o.name.replace(/"/g, '&quot;')}">${o.name}</div>`
+  ).join('');
+  box.classList.remove('hidden');
+}
+
+function hideJournalNameSuggestions() {
+  const box = document.getElementById('journalNameSuggestions');
+  if (box) { box.classList.add('hidden'); box.innerHTML = ''; }
+}
+
+if (journalNameInput) {
+  journalNameInput.addEventListener('input', () => renderJournalNameSuggestions(journalNameInput.value));
+  journalNameInput.addEventListener('focus', () => {
+    ensureJournalSuggestCatalog().then(() => renderJournalNameSuggestions(journalNameInput.value));
+  });
+}
+const journalNameSuggestionsEl = document.getElementById('journalNameSuggestions');
+if (journalNameSuggestionsEl) {
+  journalNameSuggestionsEl.addEventListener('click', (e) => {
+    const item = e.target.closest('.journal-name-suggestion-item');
+    if (!item) return;
+    journalNameInput.value = item.dataset.name;
+    hideJournalNameSuggestions();
+  });
+}
+document.addEventListener('click', (e) => {
+  if (!journalAddOverlay || journalAddOverlay.classList.contains('hidden')) return;
+  if (e.target === journalNameInput || (journalNameSuggestionsEl && journalNameSuggestionsEl.contains(e.target))) return;
+  hideJournalNameSuggestions();
+});
 
   function openJournalAdd(prefillName) {
     if (!journalAddOverlay) return;
@@ -2581,12 +2634,14 @@ function assignLanesClient(objects) {
     if (journalStatusToggle) {
       journalStatusToggle.querySelectorAll('.level-mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.status === 'seen'));
     }
-    populateJournalDatalist();
+    hideJournalNameSuggestions();
+    ensureJournalSuggestCatalog(); // remplace populateJournalDatalist()
     journalAddOverlay.classList.remove('hidden');
   }
 
   function closeJournalAdd() {
     if (journalAddOverlay) journalAddOverlay.classList.add('hidden');
+    hideJournalNameSuggestions();
   }
 
   if (journalAddBtn) journalAddBtn.addEventListener('click', () => openJournalAdd());
@@ -3141,9 +3196,9 @@ function assignLanesClient(objects) {
 
   function setLevelMode(mode) {
     levelMode = mode;
-    document.querySelectorAll('.level-mode-btn').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.levelMode === mode);
-    });
+    document.querySelectorAll('#toolLevel .level-mode-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.levelMode === mode);
+  });
     document.getElementById('levelFlatFace').classList.toggle('hidden', mode !== 'flat');
     document.getElementById('levelEdgeFace').classList.toggle('hidden', mode === 'flat');
     document.getElementById('levelHint').textContent = mode === 'flat'
@@ -3153,9 +3208,9 @@ function assignLanesClient(objects) {
         : 'Stand the phone up in landscape, resting on its long edge, and point the top at the sky.';
   }
 
-  document.querySelectorAll('.level-mode-btn').forEach((btn) => {
-    btn.addEventListener('click', () => setLevelMode(btn.dataset.levelMode));
-  });
+  document.querySelectorAll('#toolLevel .level-mode-btn').forEach((btn) => {
+  btn.addEventListener('click', () => setLevelMode(btn.dataset.levelMode));
+});
 
   async function startLevel() {
     const hint = document.getElementById('levelHint');

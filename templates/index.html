@@ -188,7 +188,12 @@
             </div>
             <div id="agendaDayFavList" class="agenda-day-panel-body">
               <div class="locked-state">
-                <p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p>
+                <p>Sélectionne un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p>
+                <div class="cal-legend">
+                  <div class="cal-legend-item"><span class="cal-legend-dot cal-day-dot-plan"></span>Plan enregistré</div>
+                  <div class="cal-legend-item"><span class="cal-legend-dot cal-day-journal-dot"></span>Observations enregistrées</div>
+                  <div class="cal-legend-item"><span class="cal-legend-star"><i class='bx bxs-star'></i></span>Favoris visibles cette nuit-là</div>
+                </div>
               </div>
             </div>
             <button id="agendaDayOpenBtn" class="login-btn hidden" style="width:100%; margin-top:14px; flex:none;">
@@ -736,8 +741,10 @@
         </div>
         <div style="display:flex; flex-direction:column; gap:14px; margin-top: 6px;">
           <div>
-            <label for="journalNameInput" class="settings-hint" style="display:block; margin-bottom:6px;">Objet</label>
-            <input type="text" id="journalNameInput" class="lib-search-input" list="journalCatalogDatalist" placeholder="Nom de l'objet…" autocomplete="off">
+            <div class="journal-name-combo">
+              <input type="text" id="journalNameInput" class="lib-search-input" placeholder="Nom de l'objet…" autocomplete="off">
+              <div id="journalNameSuggestions" class="journal-name-suggestions hidden"></div>
+            </div>
             <datalist id="journalCatalogDatalist"></datalist>
           </div>
           <div class="level-mode-toggle" id="journalStatusToggle" role="tablist">
