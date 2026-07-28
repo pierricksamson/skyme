@@ -51,6 +51,12 @@ ALLOWED_SETTINGS = {
     "loc_elev": float,
 }
 
+# Champs pouvant être explicitement remis à NULL (ex. "pas de position du
+# tout" choisi côté client). Sans cette liste, update_settings() tentait
+# caster(None) -> TypeError -> l'update était silencieusement ignoré et
+# l'ancienne latitude/longitude restait en base malgré la demande de reset.
+NULLABLE_SETTINGS = {"loc_lat", "loc_lon"}
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -255,6 +261,13 @@ def update_settings(user_id, updates: dict):
     for key, raw_value in updates.items():
         caster = ALLOWED_SETTINGS.get(key)
         if caster is None:
+            continue
+        if raw_value is None:
+            if key in NULLABLE_SETTINGS:
+                fields.append(f"{key} = ?")
+                values.append(None)
+            # Champ non-nullable envoyé à null : ignoré (comportement
+            # d'origine), pas d'erreur car ce n'est pas censé arriver.
             continue
         try:
             value = (1 if raw_value else 0) if caster is bool else caster(raw_value)

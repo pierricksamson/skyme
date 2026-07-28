@@ -1903,9 +1903,17 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       red_filter: document.body.classList.contains('red-filter'),
     };
 
-    const auto = locAutoToggle.checked;
+    const skip = locSkipToggle.checked;
+    const auto = !skip && locAutoToggle.checked;
     updates.loc_mode = auto ? 'auto' : 'manual';
-    if (!auto) {
+    if (skip) {
+      // "Aucune position pour l'instant" : on envoie explicitement null
+      // pour que la position déjà enregistrée soit effacée côté serveur
+      // (sinon update_settings ignorait silencieusement les valeurs null
+      // et l'ancienne position restait active après le reload).
+      updates.loc_lat = null;
+      updates.loc_lon = null;
+    } else if (!auto) {
       const lat = parseFloat(locLatInput.value);
       const lon = parseFloat(locLonInput.value);
       let elev = parseFloat(locElevInput.value);
@@ -1951,6 +1959,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   // ---------- Settings: Localisation (GPS auto / carte / manuel) ----------
   const locAutoToggle = document.getElementById('locAutoToggle');
+  const locAutoRow = document.getElementById('locAutoRow');
+  const locSkipToggle = document.getElementById('locSkipToggle');
   const locAutoHint = document.getElementById('locAutoHint');
   const locManualBlock = document.getElementById('locManualBlock');
   const locLatInput = document.getElementById('locLatInput');
@@ -1963,6 +1973,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const mapValidate = document.getElementById('mapValidate');
 
   function setLocationManual() {
+    locSkipToggle.checked = false;
+    locAutoRow.classList.remove('hidden');
     if (locAutoToggle.checked) {
       locAutoToggle.checked = false;
       locManualBlock.classList.remove('hidden');
@@ -1971,14 +1983,28 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     markSettingsDirty();
   }
 
+  // Masque le switch GPS et le bloc manuel quand "Aucune position" est
+  // coché : dans ce cas on n'a besoin de valider ni de GPS ni de
+  // coordonnées, la position sera simplement effacée à l'enregistrement.
+  function updateLocSkipUI() {
+    const skip = locSkipToggle.checked;
+    locAutoRow.classList.toggle('hidden', skip);
+    locManualBlock.classList.toggle('hidden', skip || locAutoToggle.checked);
+  }
+
   function loadLocationPreferences() {
     if (locSaveBtn) {
       locSaveBtn.style.display = 'none';
     }
+    const noLocSaved = settingsCache.loc_mode === 'manual'
+      && (settingsCache.loc_lat === null || settingsCache.loc_lat === undefined)
+      && (settingsCache.loc_lon === null || settingsCache.loc_lon === undefined);
+    locSkipToggle.checked = noLocSaved;
+
     const auto = settingsCache.loc_mode !== 'manual' && !geoUnavailable;
     locAutoToggle.checked = auto;
     locAutoToggle.disabled = geoUnavailable;
-    locManualBlock.classList.toggle('hidden', auto);
+    updateLocSkipUI();
     locAutoHint.textContent = geoUnavailable
       ? 'Localisation GPS refusée ou indisponible. Définis ta position manuellement ci-dessous.'
       : auto
@@ -1997,9 +2023,15 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     updateLocCurrentLine();
   }
 
+  locSkipToggle.addEventListener('change', () => {
+    updateLocSkipUI();
+    markSettingsDirty();
+  });
+
   locAutoToggle.addEventListener('change', () => {
     const auto = locAutoToggle.checked;
-    locManualBlock.classList.toggle('hidden', auto);
+    if (auto) locSkipToggle.checked = false;
+    locManualBlock.classList.toggle('hidden', auto || locSkipToggle.checked);
     locAutoHint.textContent = auto
       ? 'L\u2019application utilise la position GPS de l\u2019appareil.'
       : 'Position définie manuellement ci-dessous (non enregistrée).';
@@ -2068,6 +2100,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       confirmLocLatInput.value = lat.toFixed(4);
       confirmLocLonInput.value = lng.toFixed(4);
       confirmLocAutoToggle.checked = false;
+      confirmLocSkipToggle.checked = false;
+      confirmLocAutoRow.classList.remove('hidden');
       confirmLocManualBlock.classList.remove('hidden');
     } else {
       locLatInput.value = lat.toFixed(4);
@@ -2077,6 +2111,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     closeMapPicker();
   });
 
+
   // ---------- Écran de confirmation des paramètres (uniquement à
   // l'ouverture de l'application, pas lors d'un simple "reload" via le
   // bouton ⟳ ou "Try again", qui appellent resolveLocation() directement). ----------
@@ -2084,6 +2119,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const confirmError = document.getElementById('confirmError');
   const confirmStartBtn = document.getElementById('confirmStartBtn');
   const confirmLocAutoToggle = document.getElementById('confirmLocAutoToggle');
+  const confirmLocAutoRow = document.getElementById('confirmLocAutoRow');
+  const confirmLocSkipToggle = document.getElementById('confirmLocSkipToggle');
   const confirmLocManualBlock = document.getElementById('confirmLocManualBlock');
   const confirmLocMapBtn = document.getElementById('confirmLocMapBtn');
   const confirmLocLatInput = document.getElementById('confirmLocLatInput');
@@ -2098,9 +2135,15 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   function populateConfirmPanel() {
     document.getElementById('header').style.display = "none";
+    const noLocSaved = settingsCache.loc_mode === 'manual'
+      && (settingsCache.loc_lat === null || settingsCache.loc_lat === undefined)
+      && (settingsCache.loc_lon === null || settingsCache.loc_lon === undefined);
+    confirmLocSkipToggle.checked = noLocSaved;
+
     const auto = settingsCache.loc_mode !== 'manual';
     confirmLocAutoToggle.checked = auto;
     confirmLocManualBlock.classList.toggle('hidden', auto);
+    updateConfirmLocSkipUI();
 
     if (settingsCache.loc_lat !== null && settingsCache.loc_lat !== undefined) {
       confirmLocLatInput.value = settingsCache.loc_lat;
@@ -2132,8 +2175,19 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     confirmFixedEndInput.disabled = !fixed;
   }
 
+  // Quand "Ne pas définir de position" est coché, on masque à la fois le
+  // switch GPS et le bloc manuel : aucune position ne sera envoyée, et
+  // aucune validation de latitude/longitude n'est requise pour continuer.
+  function updateConfirmLocSkipUI() {
+    const skip = confirmLocSkipToggle.checked;
+    confirmLocAutoRow.classList.toggle('hidden', skip);
+    confirmLocManualBlock.classList.toggle('hidden', skip || confirmLocAutoToggle.checked);
+  }
+
+  confirmLocSkipToggle.addEventListener('change', updateConfirmLocSkipUI);
   confirmLocAutoToggle.addEventListener('change', () => {
-    confirmLocManualBlock.classList.toggle('hidden', confirmLocAutoToggle.checked);
+    if (confirmLocAutoToggle.checked) confirmLocSkipToggle.checked = false;
+    confirmLocManualBlock.classList.toggle('hidden', confirmLocAutoToggle.checked || confirmLocSkipToggle.checked);
   });
   confirmModeFixed.addEventListener('change', onConfirmModeChange);
   confirmModeMargin.addEventListener('change', onConfirmModeChange);
@@ -2149,7 +2203,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   confirmStartBtn.addEventListener('click', async () => {
     hideConfirmError();
-    const auto = confirmLocAutoToggle.checked;
+    const skip = confirmLocSkipToggle.checked;
+    const auto = !skip && confirmLocAutoToggle.checked;
 
     let margin = parseInt(confirmMarginInput.value, 10);
     if (isNaN(margin) || margin < 0) margin = 0;
@@ -2166,7 +2221,14 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       pref_min_alt: minAltVal,
     };
 
-    if (!auto) {
+    if (skip) {
+      // Aucune position voulue pour l'instant : on efface explicitement
+      // loc_lat/loc_lon (au lieu de les laisser tels quels en base) et on
+      // ne bloque pas sur une validation de coordonnées qui n'a pas lieu
+      // d'être.
+      updates.loc_lat = null;
+      updates.loc_lon = null;
+    } else if (!auto) {
       const lat = parseFloat(confirmLocLatInput.value);
       const lon = parseFloat(confirmLocLonInput.value);
       if (isNaN(lat) || lat < -90 || lat > 90 || isNaN(lon) || lon < -180 || lon > 180) {
