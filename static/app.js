@@ -915,6 +915,17 @@ function refreshSharedFilterViews() {
     }
   }
 
+  const tlFilterBtn = document.getElementById('tlFilterBtn');
+const tlFilterPanel = document.getElementById('tlFilterPanel');
+
+if (tlFilterBtn && tlFilterPanel) {
+  tlFilterBtn.addEventListener('click', (e) => {
+    e.stopPropagation(); // Empêche la propagation du clic
+    tlFilterPanel.classList.toggle('hidden');
+    tlFilterBtn.classList.toggle('active');
+  });
+}
+
   function renderInfoWiki(data, objectName) {
     const wrap = document.getElementById('infoWiki');
     const img = document.getElementById('infoWikiImg');
