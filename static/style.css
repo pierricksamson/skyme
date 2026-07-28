@@ -2046,3 +2046,16 @@ body.red-filter::after {
 .journal-name-suggestion-item:last-child { border-bottom: none; }
 .journal-name-suggestion-item:hover,
 .journal-name-suggestion-item.active { background: rgba(212,175,106,0.12); color: var(--accent); }
+
+.lib-row-vu-badge {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #4fae6c;
+  border: 1px solid #4fae6c;
+  border-radius: 5px;
+  padding: 0 3px 0;
+}

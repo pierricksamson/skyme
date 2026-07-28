@@ -107,18 +107,7 @@ function refreshSharedFilterViews() {
     renderSchedule(currentData);
   }
 
-  wireFilterPanel({
-    toggleBtnId: 'tlFilterBtn',
-    panelId: 'tlFilterPanel',
-    chipSelector: '.tl-filter-chip',
-    magInputId: 'tlFilterMag',
-    magClearId: 'tlFilterMagClear',
-    countId: 'tlFilterCount',
-    filterState: tlFilterState,
-    onChange: refreshSharedFilterViews,
-    linkedChipSelectors: ['.schedule-filter-chip'],
-    linkedMagInputIds: ['scheduleFilterMag'],
-  });
+ 
 
   wireFilterPanel({
     toggleBtnId: 'scheduleFilterBtn',
@@ -131,17 +120,6 @@ function refreshSharedFilterViews() {
     onChange: refreshSharedFilterViews,
     linkedChipSelectors: ['.tl-filter-chip'],
     linkedMagInputIds: ['tlFilterMag'],
-  });
-
-  wireFilterPanel({
-    toggleBtnId: 'agendaFilterBtn',
-    panelId: 'agendaFilterPanel',
-    chipSelector: '.agenda-filter-chip',
-    magInputId: 'agendaFilterMag',
-    magClearId: 'agendaFilterMagClear',
-    countId: 'agendaFilterCount',
-    filterState: agendaFilterState,
-    onChange: () => { if (agendaTtData) renderAgendaTimeline(agendaTtData, false); },
   });
 
   function wireFilterPanel({ toggleBtnId, panelId, chipSelector, magInputId, magClearId, countId, filterState, onChange, linkedChipSelectors = [], linkedMagInputIds = [] }) {
@@ -918,16 +896,6 @@ function refreshSharedFilterViews() {
     }
   }
 
-  const tlFilterBtn = document.getElementById('tlFilterBtn');
-const tlFilterPanel = document.getElementById('tlFilterPanel');
-
-if (tlFilterBtn && tlFilterPanel) {
-  tlFilterBtn.addEventListener('click', (e) => {
-    e.stopPropagation(); // Empêche la propagation du clic
-    tlFilterPanel.classList.toggle('hidden');
-    tlFilterBtn.classList.toggle('active');
-  });
-}
 
   function renderInfoWiki(data, objectName) {
     const wrap = document.getElementById('infoWiki');
@@ -2195,10 +2163,6 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
         return false;
       }
       
-      // NOUVEAU : Filtre par journal
-      if (typeof libActiveJournal !== 'undefined' && libActiveJournal !== 'all') {
-        if (getObjectJournalStatus(o.name) !== libActiveJournal) return false;
-      }
 
       if (term && !normalizeSearch(o.name).includes(term)) return false;
       return true;
@@ -2227,6 +2191,9 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const nameAttr = o.name.replace(/"/g, '&quot;');
     const isSun = o.category === 'sun';
     const fav = !isSun && isFavorite(o.name);
+    const seenBadge = getObjectJournalStatus(o.name) === 'seen'
+      ? ' <span class="lib-row-vu-badge">VU</span>'
+      : '';
 
     let whenLine = '';
     let countdownHtml = '';
@@ -2262,7 +2229,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       <div class="lib-row lib-row-clickable" data-name="${nameAttr}">
         <span class="lib-row-dot" style="background:${color}"></span>
         <span class="lib-row-main">
-          <span class="lib-row-name">${o.name}</span>
+          <span class="lib-row-name">${o.name}${seenBadge}</span>
           <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
           ${whenLine}
         </span>
@@ -2533,30 +2500,6 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     });
   });
 
-  // 3. Bibliothèque
-  window.libActiveJournal = 'all'; // Déclaré sur window ou au niveau module pour être lu par renderLibraryList
-  document.querySelectorAll('.lib-journal-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      libActiveJournal = chip.dataset.journal;
-      document.querySelectorAll('.lib-journal-chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.journal === libActiveJournal);
-      });
-      renderLibraryList();
-    });
-  });
-
-  // 4. Prévoir (Plan)
-  window.planCatalogJournal = 'all'; // Pareil
-  document.querySelectorAll('.plan-journal-chip').forEach(chip => {
-    chip.addEventListener('click', () => {
-      planCatalogJournal = chip.dataset.journal;
-      document.querySelectorAll('.plan-journal-chip').forEach(c => {
-        c.classList.toggle('active', c.dataset.journal === planCatalogJournal);
-      });
-      renderPlanCatalogList();
-    });
-  });
-
   async function renderPlanCatalogList() {
     const listEl = document.getElementById('planCatalogList');
     if (!listEl) return;
@@ -2569,10 +2512,6 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const filtered = items.filter((o) => {
       if (planCatalogFilter !== 'all' && o.category !== planCatalogFilter) return false;
       
-      // NOUVEAU : Filtre par journal
-      if (typeof planCatalogJournal !== 'undefined' && planCatalogJournal !== 'all') {
-        if (getObjectJournalStatus(o.name) !== planCatalogJournal) return false;
-      }
 
       if (term && !normalizeSearch(o.name).includes(term)) return false;
       return true;
