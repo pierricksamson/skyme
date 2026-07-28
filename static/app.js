@@ -940,7 +940,13 @@ function assignLanesClient(objects) {
     document.getElementById('infoDot').style.color = color;
     document.getElementById('infoName').textContent = o.name;
     document.getElementById('infoCategory').textContent = CATEGORY_LABEL[o.category] || capitalize(o.category);
-    updateInfoFavBtn();
+
+    const isSun = o.category === 'sun';
+    const sunWarningEl = document.getElementById('infoSunWarning');
+    if (sunWarningEl) sunWarningEl.classList.toggle('hidden', !isSun);
+    const infoFavBtnEl = document.getElementById('infoFavBtn');
+    if (infoFavBtnEl) infoFavBtnEl.classList.toggle('hidden', isSun);
+    if (!isSun) updateInfoFavBtn();
 
     const hasWindow = !!(trueRise && trueSet);
     if (hasWindow) {
@@ -1907,6 +1913,7 @@ function assignLanesClient(objects) {
 
   // ---------- Library: searchable/filterable catalog list ----------
   const CATEGORY_COLOR_VAR = {
+    sun: 'var(--c-sun)',
     moon: 'var(--c-moon)',
     planet: 'var(--c-planet)',
     star: 'var(--c-star)',
@@ -1915,6 +1922,7 @@ function assignLanesClient(objects) {
     cluster: 'var(--c-cluster)',
   };
   const CATEGORY_LABEL = {
+    sun: 'Soleil',
     moon: 'Lune',
     planet: 'Planète',
     star: 'Étoile',
@@ -2000,7 +2008,8 @@ function assignLanesClient(objects) {
     const color = CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
     const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
     const nameAttr = o.name.replace(/"/g, '&quot;');
-    const fav = isFavorite(o.name);
+    const isSun = o.category === 'sun';
+    const fav = !isSun && isFavorite(o.name);
 
     let whenLine = '';
     let countdownHtml = '';
@@ -2044,9 +2053,10 @@ function assignLanesClient(objects) {
           <span class="lib-row-mag">${magStr}</span>
           ${countdownHtml}
         </span>
+        ${isSun ? '' : `
         <button type="button" class="lib-fav-btn${fav ? ' active' : ''}" data-name="${nameAttr}" title="${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}">
           <i class='bx ${fav ? 'bxs-star' : 'bx-star'}'></i>
-        </button>
+        </button>`}
       </div>
     `;
   }

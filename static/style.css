@@ -10,6 +10,7 @@
   --accent-soft: rgba(212,175,106,0.13);
   --accent-dim: rgba(212,175,106,0.35);
 
+  --c-sun: #f2a93c;
   --c-moon: #d9d2c4;
   --c-planet: #c98a4b;
   --c-star: #eae0b8;
@@ -1724,6 +1725,25 @@ body.red-filter::after {
   line-height: 1.5;
   color: var(--text-muted);
   max-height: 95px;
+}
+
+.info-sun-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  border-radius: 12px;
+  background: rgba(242, 169, 60, 0.12);
+  border: 1px solid rgba(242, 169, 60, 0.35);
+  color: #f2a93c;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.info-sun-warning i {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
 }
 
 .info-grid {

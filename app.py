@@ -564,6 +564,15 @@ def catalog_list():
     favorites = set(get_favorites(request.user["id"]))
 
     items = [{
+        "name": "Sun",
+        "category": "sun",
+        "magnitude": -26.7,
+        "ra": None,
+        "dec": None,
+        "favorable": False,
+        "_min_alt_override": -0.83,
+        "_factory": (lambda times, loc: get_body("sun", times, loc)),
+    }, {
         "name": "Moon",
         "category": "moon",
         "magnitude": None,
@@ -626,9 +635,12 @@ def catalog_list():
 
     for item in items:
         factory = item.pop("_factory")
-        item["favorite"] = item["name"] in favorites
+        item_min_alt = item.pop("_min_alt_override", min_alt)
+        # Le Soleil n'est jamais favoritable (objet uniquement de référence
+        # dans la bibliothèque, jamais dans la timeline/l'agenda).
+        item["favorite"] = (item["name"] in favorites) if item.get("favorable", True) else False
         if location is not None:
-            event = find_rise_set_event(factory, location, Time(now_utc), min_alt=min_alt,
+            event = find_rise_set_event(factory, location, Time(now_utc), min_alt=item_min_alt,
                                          extended_days=30)
             item["rise_iso"] = event["rise_iso"]
             item["set_iso"] = event["set_iso"]
@@ -855,6 +867,7 @@ def catalog_stats():
         deep_sky_by_kind[kind] = deep_sky_by_kind.get(kind, 0) + 1
 
     counts = {
+        "sun": 1,
         "moon": 1,
         "planet": len(PLANET_MAG),
         "star": len(STARS),
