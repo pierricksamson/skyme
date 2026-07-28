@@ -192,6 +192,9 @@
             <button id="agendaDayOpenBtn" class="login-btn hidden" style="width:100%; margin-top:14px; flex:none;">
               <i class='bx bx-telescope'></i> Ouvrir cette nuit
             </button>
+            <button id="agendaDayPlanBtn" class="settings-discard-btn hidden" style="width:100%; margin-top:8px; flex:none;">
+              <i class='bx bx-list-check'></i> Ouvrir le plan
+            </button>
           </div>
         </div>
 
@@ -249,6 +252,43 @@
             <p id="agendaTtLoadingText">Chargement du programme…</p>
           </div>
         </div>
+      </section>
+
+      <section id="view-plan" class="view hidden">
+        <div class="section-heading"><h2>Prévoir une soirée</h2></div>
+
+        <div class="plan-date-row">
+          <button id="planPrevDay" class="cal-nav-btn" title="Jour précédent">‹</button>
+          <input type="date" id="planDateInput">
+          <button id="planNextDay" class="cal-nav-btn" title="Jour suivant">›</button>
+        </div>
+        <p id="planStatusLine" class="settings-hint" style="margin:-6px 0 14px;">—</p>
+
+        <div class="section-heading"><h2>Objets sélectionnés</h2></div>
+        <p id="planSelectedEmpty" class="lib-empty hidden">Aucun objet sélectionné pour l'instant.</p>
+        <div id="planSelectedList" class="lib-list" style="margin-bottom:16px;"></div>
+
+        <textarea id="planNoteInput" class="lib-search-input plan-note-input" rows="3" placeholder="Notes (matériel, cible prioritaire…)"></textarea>
+
+        <div style="display:flex; gap:10px; margin:14px 0 24px;">
+          <button id="planSaveBtn" type="button" class="login-btn" style="flex:1;">Enregistrer le plan</button>
+          <button id="planDeleteBtn" type="button" class="settings-discard-btn hidden" style="flex:none;">Supprimer</button>
+        </div>
+
+        <div class="section-heading"><h2>Ajouter des objets</h2></div>
+        <div class="lib-search-row">
+          <input type="text" id="planSearchInput" class="lib-search-input" placeholder="Rechercher un objet…" autocomplete="off">
+        </div>
+        <div class="lib-filter-chips">
+          <button type="button" class="lib-chip plan-filter-chip active" data-cat="all">Tout</button>
+          <button type="button" class="lib-chip plan-filter-chip" data-cat="moon">Lune</button>
+          <button type="button" class="lib-chip plan-filter-chip" data-cat="planet">Planètes</button>
+          <button type="button" class="lib-chip plan-filter-chip" data-cat="star">Étoiles</button>
+          <button type="button" class="lib-chip plan-filter-chip" data-cat="galaxy">Galaxies</button>
+          <button type="button" class="lib-chip plan-filter-chip" data-cat="nebula">Nébuleuses</button>
+          <button type="button" class="lib-chip plan-filter-chip" data-cat="cluster">Amas</button>
+        </div>
+        <div id="planCatalogList" class="lib-list"></div>
       </section>
 
       <section id="view-tools" class="view hidden">
@@ -485,6 +525,10 @@
       <button class="nav-btn" data-view="agenda">
         <i class='bx bx-calendar'></i>
         <span>Agenda</span>
+      </button>
+      <button class="nav-btn" data-view="plan">
+        <i class='bx bx-list-check'></i>
+        <span>Prévoir</span>
       </button>
       <button class="nav-btn" data-view="tools">
         <i class='bx bx-wrench'></i>

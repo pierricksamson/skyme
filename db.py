@@ -7,7 +7,9 @@ Couche d'accès SQLite pour Skyme.
 - Paramètres utilisateur (zoom, plage horaire, altitude min, mode nocturne
   "red filter", etc.) : plus rien n'est stocké côté client (localStorage),
   tout vit dans la base.
+- Plans de soirée (objets prévus + note, par jour) : voir /api/plan.
 """
+import json
 import secrets
 import sqlite3
 from datetime import datetime, timezone
@@ -86,6 +88,16 @@ def init_db():
                 object_name TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY (user_id, object_name),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS plans (
+                user_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                objects TEXT NOT NULL DEFAULT '[]',
+                note TEXT NOT NULL DEFAULT '',
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, date),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
             """
@@ -270,3 +282,82 @@ def toggle_favorite(user_id, object_name):
         return False
     add_favorite(user_id, object_name)
     return True
+
+
+# ---------- Plans de soirée (objets prévus + note, par jour) ----------
+
+def get_plan(user_id, date_str):
+    """Retourne {date, objects, note, updated_at} ou None si aucun plan."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT date, objects, note, updated_at FROM plans WHERE user_id = ? AND date = ?",
+            (user_id, date_str),
+        ).fetchone()
+        if row is None:
+            return None
+        data = dict(row)
+        try:
+            data["objects"] = json.loads(data["objects"])
+        except (TypeError, ValueError):
+            data["objects"] = []
+        return data
+    finally:
+        conn.close()
+
+
+def save_plan(user_id, date_str, objects, note=""):
+    """Crée ou remplace le plan d'un utilisateur pour un jour donné."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            INSERT INTO plans (user_id, date, objects, note, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, date) DO UPDATE SET
+                objects = excluded.objects,
+                note = excluded.note,
+                updated_at = excluded.updated_at
+            """,
+            (
+                user_id,
+                date_str,
+                json.dumps(objects, ensure_ascii=False),
+                note or "",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_plan(user_id, date_str):
+    conn = get_connection()
+    try:
+        conn.execute("DELETE FROM plans WHERE user_id = ? AND date = ?", (user_id, date_str))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_plan_counts(user_id, start_date, end_date):
+    """Retourne {date: nombre d'objets prévus} pour chaque jour ayant un plan
+    dans la plage [start_date, end_date] (inclus), utilisé pour la bulle de
+    l'agenda."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT date, objects FROM plans WHERE user_id = ? AND date BETWEEN ? AND ?",
+            (user_id, start_date, end_date),
+        ).fetchall()
+        counts = {}
+        for row in rows:
+            try:
+                objs = json.loads(row["objects"])
+            except (TypeError, ValueError):
+                objs = []
+            counts[row["date"]] = len(objs)
+        return counts
+    finally:
+        conn.close()

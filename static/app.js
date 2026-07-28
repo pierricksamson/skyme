@@ -1022,7 +1022,14 @@ function assignLanesClient(objects) {
       renderOverviewFavorites();
     } else if (name === 'agenda') {
       requestAnimationFrame(sizeAgendaDayPanel);
-    }
+    }  else if (name === 'plan') {
+      if (!planInitialized) {
+        planInitialized = true;
+        loadPlan(planCurrentDate);
+      } else {
+        renderPlanCatalogList();
+      }
+    } 
     if (name !== 'tools') {
       stopActiveTool();
     }
@@ -1105,8 +1112,10 @@ function assignLanesClient(objects) {
       const favBadge = favCount > 0
         ? `<span class="cal-day-fav"><i class='bx bxs-star'></i>${favCount}</span>`
         : '';
+      const hasPlan = !!planDatesWithPlan[dateStr];
+      const planBadge = hasPlan ? `<span class="cal-day-plan"><i class='bx bxs-list-check'></i></span>` : '';
 
-      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${inRange ? '<span class="cal-day-dot"></span>' : ''}`;
+      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${planBadge}${inRange ? '<span class="cal-day-dot"></span>' : ''}`;
       if (inRange) cell.addEventListener('click', () => openAgendaDay(dateStr, d));
       grid.appendChild(cell);
     }
@@ -1159,7 +1168,15 @@ function assignLanesClient(objects) {
     titleEl.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     closeBtn.classList.remove('hidden');
     openBtn.classList.remove('hidden');
-    // TODO listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
+    const planBtn = document.getElementById('agendaDayPlanBtn');
+    if (planBtn) {
+      const hasPlan = !!planDatesWithPlan[dateStr];
+      planBtn.classList.toggle('hidden', !hasPlan);
+      planBtn.onclick = () => {
+        switchView('plan');
+        loadPlan(dateStr);
+      };
+    }
     listEl.innerHTML = loadingBlockHtml('Chargement des favoris…');
 
     try {
@@ -1195,6 +1212,8 @@ function assignLanesClient(objects) {
     document.getElementById('agendaDayTitle').textContent = 'Sélectionne une nuit';
     document.getElementById('agendaDayClose').classList.add('hidden');
     document.getElementById('agendaDayOpenBtn').classList.add('hidden');
+    const planBtn = document.getElementById('agendaDayPlanBtn');
+    if (planBtn) { planBtn.classList.add('hidden'); planBtn.onclick = null; }
     document.getElementById('agendaDayFavList').innerHTML =
       '<div class="locked-state"><p>Touche un jour dans le calendrier pour voir les favoris visibles cette nuit-là.</p></div>';
     renderAgendaCalendar();
@@ -2107,6 +2126,236 @@ function assignLanesClient(objects) {
   const overviewFavListEl = document.getElementById('overviewFavList');
   if (overviewFavListEl) overviewFavListEl.addEventListener('click', handleCatalogRowClick);
 
+  // ---------- Prévoir (planifier une soirée : sélection d'objets + note, par jour) ----------
+  let planCurrentDate = toDateStr(today0);
+  let planSelectedNames = new Set();
+  let planExists = false;
+  let planCatalogFilter = 'all';
+  let planCatalogSearch = '';
+  let planDatesWithPlan = {}; // { 'YYYY-MM-DD': nombre d'objets prévus }
+  let planInitialized = false;
+
+  function planDateInputEl() { return document.getElementById('planDateInput'); }
+
+  function updatePlanStatusLine() {
+    const el = document.getElementById('planStatusLine');
+    if (!el) return;
+    const d = new Date(planCurrentDate);
+    const label = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    el.textContent = planExists
+      ? `Plan enregistré pour la nuit du ${label} (${planSelectedNames.size} objet${planSelectedNames.size > 1 ? 's' : ''}).`
+      : `Aucun plan enregistré pour la nuit du ${label} pour l\u2019instant.`;
+  }
+
+  function updatePlanDeleteBtn() {
+    const btn = document.getElementById('planDeleteBtn');
+    if (btn) btn.classList.toggle('hidden', !planExists);
+  }
+
+  async function loadPlan(dateStr) {
+    planCurrentDate = dateStr;
+    if (planDateInputEl()) planDateInputEl().value = dateStr;
+
+    const noteInput = document.getElementById('planNoteInput');
+    if (noteInput) noteInput.value = '';
+    planSelectedNames = new Set();
+    planExists = false;
+
+    try {
+      const res = await fetch(`/api/plan?date=${dateStr}`);
+      if (res.ok) {
+        const data = await res.json();
+        planSelectedNames = new Set(data.objects || []);
+        planExists = !!data.exists;
+        if (noteInput) noteInput.value = data.note || '';
+      }
+    } catch (e) {
+      // hors-ligne : formulaire vide
+    }
+
+    updatePlanStatusLine();
+    updatePlanDeleteBtn();
+    renderPlanSelectedList();
+    await renderPlanCatalogList();
+  }
+
+  async function togglePlanObject(name) {
+    if (planSelectedNames.has(name)) planSelectedNames.delete(name);
+    else planSelectedNames.add(name);
+    renderPlanSelectedList();
+    renderPlanCatalogList();
+  }
+
+  async function savePlan() {
+    const noteInput = document.getElementById('planNoteInput');
+    const btn = document.getElementById('planSaveBtn');
+    const objects = Array.from(planSelectedNames);
+    if (btn) { btn.disabled = true; btn.textContent = 'Enregistrement…'; }
+    try {
+      const res = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: planCurrentDate, objects, note: noteInput ? noteInput.value : '' }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        planExists = !!data.exists;
+      }
+    } catch (e) {
+      // best effort : le formulaire reste tel quel pour cette session
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Enregistrer le plan'; }
+    updatePlanStatusLine();
+    updatePlanDeleteBtn();
+    loadPlanDatesRange();
+  }
+
+  async function deleteCurrentPlan() {
+    try {
+      await fetch(`/api/plan?date=${planCurrentDate}`, { method: 'DELETE' });
+    } catch (e) {
+      // best effort
+    }
+    planSelectedNames = new Set();
+    planExists = false;
+    const noteInput = document.getElementById('planNoteInput');
+    if (noteInput) noteInput.value = '';
+    renderPlanSelectedList();
+    renderPlanCatalogList();
+    updatePlanStatusLine();
+    updatePlanDeleteBtn();
+    loadPlanDatesRange();
+  }
+
+  function planRowHtml(o) {
+    const color = CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
+    const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
+    const nameAttr = o.name.replace(/"/g, '&quot;');
+    const selected = planSelectedNames.has(o.name);
+    return `
+      <div class="lib-row lib-row-clickable lib-row-plan-toggle${selected ? ' active' : ''}" data-name="${nameAttr}">
+        <span class="lib-row-dot" style="background:${color}"></span>
+        <span class="lib-row-main">
+          <span class="lib-row-name">${o.name}</span>
+          <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
+        </span>
+        <span class="lib-row-mag">${magStr}</span>
+        <button type="button" class="lib-fav-btn${selected ? ' active' : ''}" data-name="${nameAttr}" title="${selected ? 'Retirer du plan' : 'Ajouter au plan'}">
+          <i class='bx ${selected ? 'bxs-check-square' : 'bx-square'}'></i>
+        </button>
+      </div>
+    `;
+  }
+
+  async function renderPlanCatalogList() {
+    const listEl = document.getElementById('planCatalogList');
+    if (!listEl) return;
+    const items = await fetchCatalogListOnce();
+    if (!items) {
+      listEl.innerHTML = '<div class="lib-empty">Impossible de charger la bibliothèque.</div>';
+      return;
+    }
+    const term = normalizeSearch(planCatalogSearch.trim());
+    const filtered = items.filter((o) => {
+      if (planCatalogFilter !== 'all' && o.category !== planCatalogFilter) return false;
+      if (term && !normalizeSearch(o.name).includes(term)) return false;
+      return true;
+    });
+    listEl.innerHTML = filtered.length
+      ? filtered.map(planRowHtml).join('')
+      : '<div class="lib-empty">Aucun objet ne correspond.</div>';
+  }
+
+  function renderPlanSelectedList() {
+    const listEl = document.getElementById('planSelectedList');
+    const emptyEl = document.getElementById('planSelectedEmpty');
+    if (!listEl) return;
+    if (planSelectedNames.size === 0) {
+      listEl.innerHTML = '';
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+    listEl.innerHTML = Array.from(planSelectedNames).map((name) => {
+      const item = catalogList && catalogList.find((o) => o.name === name);
+      const color = item ? (CATEGORY_COLOR_VAR[item.category] || 'var(--text-muted)') : 'var(--text-muted)';
+      const nameAttr = name.replace(/"/g, '&quot;');
+      return `
+        <div class="lib-row" data-name="${nameAttr}">
+          <span class="lib-row-dot" style="background:${color}"></span>
+          <span class="lib-row-main"><span class="lib-row-name">${name}</span></span>
+          <button type="button" class="lib-fav-btn active" data-name="${nameAttr}" title="Retirer du plan">
+            <i class='bx bx-x'></i>
+          </button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function handlePlanRowClick(e) {
+    const btn = e.target.closest('.lib-fav-btn');
+    const row = e.target.closest('.lib-row');
+    const name = (btn && btn.dataset.name) || (row && row.dataset.name);
+    if (!name) return;
+    e.stopPropagation();
+    togglePlanObject(name);
+  }
+
+  const planCatalogListEl = document.getElementById('planCatalogList');
+  if (planCatalogListEl) planCatalogListEl.addEventListener('click', handlePlanRowClick);
+  const planSelectedListEl = document.getElementById('planSelectedList');
+  if (planSelectedListEl) planSelectedListEl.addEventListener('click', handlePlanRowClick);
+
+  const planSearchInputEl = document.getElementById('planSearchInput');
+  if (planSearchInputEl) {
+    planSearchInputEl.addEventListener('input', () => {
+      planCatalogSearch = planSearchInputEl.value;
+      renderPlanCatalogList();
+    });
+  }
+  document.querySelectorAll('.plan-filter-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      planCatalogFilter = chip.dataset.cat;
+      document.querySelectorAll('.plan-filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
+      renderPlanCatalogList();
+    });
+  });
+
+  const planPrevDayBtn = document.getElementById('planPrevDay');
+  if (planPrevDayBtn) planPrevDayBtn.addEventListener('click', () => {
+    const d = new Date(planCurrentDate);
+    d.setDate(d.getDate() - 1);
+    loadPlan(toDateStr(d));
+  });
+  const planNextDayBtn = document.getElementById('planNextDay');
+  if (planNextDayBtn) planNextDayBtn.addEventListener('click', () => {
+    const d = new Date(planCurrentDate);
+    d.setDate(d.getDate() + 1);
+    loadPlan(toDateStr(d));
+  });
+  if (planDateInputEl()) {
+    planDateInputEl().addEventListener('change', () => {
+      const v = planDateInputEl().value;
+      if (v) loadPlan(v);
+    });
+  }
+  const planSaveBtnEl = document.getElementById('planSaveBtn');
+  if (planSaveBtnEl) planSaveBtnEl.addEventListener('click', savePlan);
+  const planDeleteBtnEl = document.getElementById('planDeleteBtn');
+  if (planDeleteBtnEl) planDeleteBtnEl.addEventListener('click', deleteCurrentPlan);
+
+  async function loadPlanDatesRange() {
+    try {
+      const res = await fetch(`/api/plans/range?start_date=${toDateStr(today0)}&end_date=${toDateStr(agendaLastDay)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      planDatesWithPlan = data.counts || {};
+      renderAgendaCalendar();
+    } catch (e) {
+      // silencieux : le badge est un bonus, pas une fonctionnalité bloquante
+    }
+  }
+
   // ========================================================================
   // ---------- Tools: Compass / Level / Polar Clock ----------
   // ========================================================================
@@ -2487,6 +2736,8 @@ function assignLanesClient(objects) {
       ['Chargement de la bibliothèque…', fetchCatalogListOnce],
       ['Chargement des statistiques…', fetchCatalogStatsOnce],
       ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
+      ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
+      ['Chargement des plans…', loadPlanDatesRange],
     ];
 
     for (let i = 0; i < steps.length; i++) {

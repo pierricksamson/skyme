@@ -26,6 +26,7 @@ from db import (
     init_db, verify_user, create_session, get_user_by_session,
     delete_session, get_settings, update_settings,
     get_favorites, toggle_favorite,
+    get_plan, save_plan, delete_plan, get_plan_counts,
 )
 
 app = Flask(__name__)
@@ -654,6 +655,64 @@ def favorites_toggle():
         return jsonify({"error": "name required"}), 400
     is_favorite = toggle_favorite(request.user["id"], name)
     return jsonify({"name": name, "favorite": is_favorite})
+
+
+@app.route("/api/plan", methods=["GET", "POST", "DELETE"])
+@login_required
+def plan_api():
+    """Plan de soirée : liste d'objets choisis + note libre, pour un jour
+    donné. GET renvoie le plan existant (ou un plan vide), POST crée/écrase
+    le plan du jour indiqué, DELETE le supprime."""
+    date_str = (request.args.get("date") or "").strip()
+    if request.method != "GET":
+        payload = request.get_json(silent=True) or {}
+        date_str = (payload.get("date") or date_str or "").strip()
+
+    if not date_str:
+        return jsonify({"error": "date required"}), 400
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({"error": "date must be formatted YYYY-MM-DD"}), 400
+
+    if request.method == "DELETE":
+        delete_plan(request.user["id"], date_str)
+        return jsonify({"date": date_str, "objects": [], "note": "", "exists": False})
+
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        objects = payload.get("objects") or []
+        if not isinstance(objects, list):
+            return jsonify({"error": "objects must be a list"}), 400
+        objects = [str(o) for o in objects][:200]
+        note = str(payload.get("note") or "")[:2000]
+        save_plan(request.user["id"], date_str, objects, note)
+
+    plan = get_plan(request.user["id"], date_str)
+    if plan is None:
+        return jsonify({"date": date_str, "objects": [], "note": "", "exists": False})
+    return jsonify({
+        "date": plan["date"],
+        "objects": plan["objects"],
+        "note": plan["note"],
+        "exists": True,
+    })
+
+
+@app.route("/api/plans/range")
+@login_required
+def plans_range():
+    """Pour une plage de dates, renvoie le nombre d'objets prévus chaque
+    jour où un plan existe, afin d'afficher un badge dans l'agenda."""
+    try:
+        start_date = request.args["start_date"]
+        end_date = request.args["end_date"]
+        datetime.strptime(start_date, "%Y-%m-%d")
+        datetime.strptime(end_date, "%Y-%m-%d")
+    except (KeyError, ValueError):
+        return jsonify({"error": "start_date/end_date required (YYYY-MM-DD)"}), 400
+    counts = get_plan_counts(request.user["id"], start_date, end_date)
+    return jsonify({"counts": counts})
 
 
 @app.route("/api/agenda/favorites-count")
