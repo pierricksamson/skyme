@@ -1115,7 +1115,18 @@ function refreshSharedFilterViews() {
   });
 
   let currentView = 'timeline';
+  function discardSettingsChanges() {
+    loadPreferences();
+    loadLocationPreferences();
+    applyRedFilter(!!settingsCache.red_filter);
+    clearSettingsDirty();
+  }
+
   function switchView(name) {
+    if (currentView === 'settings' && name !== 'settings' && settingsSaveBar && !settingsSaveBar.classList.contains('hidden')) {
+      discardSettingsChanges();
+    }
+
     currentView = name;
     document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
     document.getElementById(`view-${name}`).classList.remove('hidden');
@@ -1923,7 +1934,19 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const mapClose = document.getElementById('mapClose');
   const mapValidate = document.getElementById('mapValidate');
 
+  function setLocationManual() {
+    if (locAutoToggle.checked) {
+      locAutoToggle.checked = false;
+      locManualBlock.classList.remove('hidden');
+      locAutoHint.textContent = 'Position définie manuellement ci-dessous (non enregistrée).';
+    }
+    markSettingsDirty();
+  }
+
   function loadLocationPreferences() {
+    if (locSaveBtn) {
+      locSaveBtn.style.display = 'none';
+    }
     const auto = settingsCache.loc_mode !== 'manual';
     locAutoToggle.checked = auto;
     locManualBlock.classList.toggle('hidden', auto);
@@ -2006,6 +2029,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const { lat, lng } = pickerMarker.getLatLng();
     locLatInput.value = lat.toFixed(4);
     locLonInput.value = lng.toFixed(4);
+    setLocationManual();
     closeMapPicker();
   });
 
