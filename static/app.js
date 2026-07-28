@@ -194,6 +194,8 @@ function assignLanesClient(objects) {
   agendaLastDay.setDate(agendaLastDay.getDate() + AGENDA_DAYS - 1);
   let agendaViewMonth = new Date(today0.getFullYear(), today0.getMonth(), 1);
   let agendaFavCounts = {}; // { 'YYYY-MM-DD': nombre d'objets favoris visibles ce soir-là }
+  let journalEntries = [];
+  let journalDatesSet = new Set(); // dates (YYYY-MM-DD) ayant au moins une entrée de journal
 
   function getObsMode() {
     return settingsCache.pref_mode || 'margin';
@@ -948,6 +950,12 @@ function assignLanesClient(objects) {
     if (infoFavBtnEl) infoFavBtnEl.classList.toggle('hidden', isSun);
     if (!isSun) updateInfoFavBtn();
 
+    const infoJournalBtnEl = document.getElementById('infoJournalBtn');
+    if (infoJournalBtnEl) {
+      infoJournalBtnEl.classList.remove('journal-added');
+      infoJournalBtnEl.classList.toggle('hidden', isSun || !o.up_now);
+    }
+
     const hasWindow = !!(trueRise && trueSet);
     if (hasWindow) {
       document.getElementById('infoRise').textContent = fmtTime(trueRise);
@@ -1009,6 +1017,30 @@ function assignLanesClient(objects) {
     updateInfoFavBtn();
   });
 
+  document.getElementById('infoJournalBtn').addEventListener('click', async () => {
+    if (!infoObj) return;
+    const btn = document.getElementById('infoJournalBtn');
+    const now = new Date();
+    try {
+      await addJournalEntry({
+        name: infoObj.name,
+        category: infoObj.category,
+        status: 'seen',
+        date: toDateStr(now),
+        time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+      });
+      btn.classList.add('journal-added');
+      const icon = btn.querySelector('i');
+      if (icon) icon.className = 'bx bx-check';
+      setTimeout(() => {
+        if (icon) icon.className = 'bx bx-book-content';
+        btn.classList.remove('journal-added');
+      }, 1500);
+    } catch (e) {
+      // best effort
+    }
+  });
+
   document.getElementById('infoClose').addEventListener('click', closeInfo);
   document.getElementById('infoOverlay').addEventListener('click', (e) => {
     if (e.target.id === 'infoOverlay') closeInfo();
@@ -1020,7 +1052,7 @@ function assignLanesClient(objects) {
     document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
     document.getElementById(`view-${name}`).classList.remove('hidden');
     document.querySelectorAll('.nav-btn[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
-    if (menuNavBtn) menuNavBtn.classList.toggle('active', ['agenda', 'plan', 'tools'].includes(name));
+    if (menuNavBtn) menuNavBtn.classList.toggle('active', ['agenda', 'plan', 'tools', 'journal'].includes(name));
     if (name === 'timeline' && currentData) {
       renderTimeline(currentData);
       positionNowLine(currentData);
@@ -1031,6 +1063,8 @@ function assignLanesClient(objects) {
       renderOverviewFavorites();
     } else if (name === 'agenda') {
       requestAnimationFrame(sizeAgendaDayPanel);
+    } else if (name === 'journal') {
+      renderJournalList();
     }  else if (name === 'plan') {
       if (!planInitialized) {
         planInitialized = true;
@@ -1153,8 +1187,12 @@ function assignLanesClient(objects) {
         : '';
       const hasPlan = !!planDatesWithPlan[dateStr];
       const dotClass = hasPlan ? 'cal-day-dot cal-day-dot-plan' : 'cal-day-dot';
+      const isPast = d < today0;
+      const journalDot = (isPast && journalDatesSet.has(dateStr))
+        ? '<span class="cal-day-journal-dot" title="Observations enregistrées"></span>'
+        : '';
 
-      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${inRange ? `<span class="${dotClass}"></span>` : ''}`;
+      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${inRange ? `<span class="${dotClass}"></span>` : ''}${journalDot}`;
       if (inRange) cell.addEventListener('click', () => openAgendaDay(dateStr, d));
       grid.appendChild(cell);
     }
@@ -2402,6 +2440,151 @@ function assignLanesClient(objects) {
     }
   }
 
+  // ---------- Journal (historique des observations : vu / tentative échouée) ----------
+
+  function fmtJournalDate(dateStr) {
+    const d = new Date(`${dateStr}T00:00:00`);
+    return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  async function loadJournal() {
+    try {
+      const res = await fetch('/api/journal');
+      if (!res.ok) return;
+      const data = await res.json();
+      journalEntries = data.entries || [];
+      journalDatesSet = new Set(journalEntries.map((e) => e.date));
+      renderJournalList();
+      renderAgendaCalendar();
+    } catch (e) {
+      // silencieux : hors-ligne / erreur réseau
+    }
+  }
+
+  function renderJournalList() {
+    const listEl = document.getElementById('journalList');
+    const emptyEl = document.getElementById('journalEmpty');
+    if (!listEl) return;
+
+    if (journalEntries.length === 0) {
+      listEl.innerHTML = '';
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    listEl.innerHTML = journalEntries.map((e) => {
+      const color = CATEGORY_COLOR_VAR[e.category] || 'var(--text-muted)';
+      const statusLabel = e.status === 'failed' ? 'Échec' : 'Vu';
+      const statusClass = e.status === 'failed' ? 'journal-row-status-failed' : 'journal-row-status-seen';
+      const when = e.time ? `${fmtJournalDate(e.date)} · ${e.time}` : fmtJournalDate(e.date);
+      return `
+        <div class="lib-row">
+          <span class="lib-row-dot" style="background:${color}"></span>
+          <div class="lib-row-main">
+            <span class="lib-row-name">${e.object_name}</span>
+            <span class="lib-row-when">${when}</span>
+          </div>
+          <span class="journal-row-status ${statusClass}">${statusLabel}</span>
+          <button type="button" class="journal-row-del" data-id="${e.id}" title="Supprimer">
+            <i class='bx bx-trash'></i>
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.journal-row-del').forEach((btn) => {
+      btn.addEventListener('click', () => deleteJournalEntry(parseInt(btn.dataset.id, 10)));
+    });
+  }
+
+  async function addJournalEntry(payload) {
+    const res = await fetch('/api/journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('add failed');
+    await loadJournal();
+  }
+
+  async function deleteJournalEntry(id) {
+    try {
+      const res = await fetch(`/api/journal/${id}`, { method: 'DELETE' });
+      if (res.ok) await loadJournal();
+    } catch (e) {
+      // best effort
+    }
+  }
+
+  // ---------- Journal : bottom sheet d'ajout manuel ----------
+  const journalAddOverlay = document.getElementById('journalAddOverlay');
+  const journalAddBtn = document.getElementById('journalAddBtn');
+  const journalAddClose = document.getElementById('journalAddClose');
+  const journalAddSubmit = document.getElementById('journalAddSubmit');
+  const journalNameInput = document.getElementById('journalNameInput');
+  const journalDateInput = document.getElementById('journalDateInput');
+  const journalTimeInput = document.getElementById('journalTimeInput');
+  const journalAddError = document.getElementById('journalAddError');
+
+  async function populateJournalDatalist() {
+    const dl = document.getElementById('journalCatalogDatalist');
+    if (!dl || dl.childElementCount) return;
+    const items = await fetchCatalogListOnce();
+    if (!items) return;
+    dl.innerHTML = items.map((o) => `<option value="${o.name}">`).join('');
+  }
+
+  function openJournalAdd(prefillName) {
+    if (!journalAddOverlay) return;
+    if (journalAddError) journalAddError.classList.add('hidden');
+    journalNameInput.value = prefillName || '';
+    journalDateInput.value = toDateStr(new Date());
+    journalTimeInput.value = '';
+    document.getElementById('journalStatusSeen').checked = true;
+    populateJournalDatalist();
+    journalAddOverlay.classList.remove('hidden');
+  }
+
+  function closeJournalAdd() {
+    if (journalAddOverlay) journalAddOverlay.classList.add('hidden');
+  }
+
+  if (journalAddBtn) journalAddBtn.addEventListener('click', () => openJournalAdd());
+  if (journalAddClose) journalAddClose.addEventListener('click', closeJournalAdd);
+  if (journalAddOverlay) {
+    journalAddOverlay.addEventListener('click', (e) => {
+      if (e.target.id === 'journalAddOverlay') closeJournalAdd();
+    });
+  }
+  if (journalAddSubmit) {
+    journalAddSubmit.addEventListener('click', async () => {
+      const name = (journalNameInput.value || '').trim();
+      if (!name) {
+        journalAddError.textContent = 'Indique le nom de l\u2019objet.';
+        journalAddError.classList.remove('hidden');
+        return;
+      }
+      const status = document.getElementById('journalStatusFailed').checked ? 'failed' : 'seen';
+      const catalogItem = (catalogList || []).find((o) => o.name.toLowerCase() === name.toLowerCase());
+      const category = catalogItem ? catalogItem.category : '';
+      journalAddSubmit.disabled = true;
+      try {
+        await addJournalEntry({
+          name, category, status,
+          date: journalDateInput.value || toDateStr(new Date()),
+          time: journalTimeInput.value || '',
+        });
+        closeJournalAdd();
+      } catch (e) {
+        journalAddError.textContent = 'Impossible d\u2019ajouter cette observation.';
+        journalAddError.classList.remove('hidden');
+      } finally {
+        journalAddSubmit.disabled = false;
+      }
+    });
+  }
+
   // ---------- Timeline du plan : n'affiche que les objets choisis pour la
   // nuit prévue, avec la now-line si on est aujourd'hui et dans la bonne
   // plage horaire (même logique que la timetable de l'agenda). ----------
@@ -3100,6 +3283,7 @@ function assignLanesClient(objects) {
       ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
       ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
       ['Chargement des plans…', loadPlanDatesRange],
+      ['Chargement du journal…', loadJournal],
     ];
 
     for (let i = 0; i < steps.length; i++) {
@@ -3139,7 +3323,7 @@ function assignLanesClient(objects) {
     startLibraryCountdownTimer();
   }
   initApp();
-  resetZoomToFit()
+  resetZoomToFit();
 })();
 
 function loadingBlockHtml(msg, abs = false) {

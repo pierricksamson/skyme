@@ -100,6 +100,21 @@ def init_db():
                 PRIMARY KEY (user_id, date),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS journal (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                object_name TEXT NOT NULL,
+                category TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'seen',
+                date TEXT NOT NULL,
+                time TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_journal_user_date
+                ON journal(user_id, date);
             """
         )
         conn.commit()
@@ -337,6 +352,59 @@ def delete_plan(user_id, date_str):
     try:
         conn.execute("DELETE FROM plans WHERE user_id = ? AND date = ?", (user_id, date_str))
         conn.commit()
+    finally:
+        conn.close()
+
+
+# ---------- Journal (historique des observations : vu / tentative échouée) ----------
+
+def add_journal_entry(user_id, object_name, category, status, date_str, time_str=None, note=""):
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO journal (user_id, object_name, category, status, date, time, note, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id, object_name, category or "", status or "seen",
+                date_str, (time_str or None), note or "",
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid
+    finally:
+        conn.close()
+
+
+def get_journal(user_id, limit=500):
+    """Retourne l'historique de l'utilisateur, du plus récent au plus ancien
+    (date puis heure puis date de création)."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            """
+            SELECT id, object_name, category, status, date, time, note, created_at
+            FROM journal WHERE user_id = ?
+            ORDER BY date DESC, (time IS NULL) ASC, time DESC, created_at DESC
+            LIMIT ?
+            """,
+            (user_id, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def delete_journal_entry(user_id, entry_id):
+    conn = get_connection()
+    try:
+        cur = conn.execute(
+            "DELETE FROM journal WHERE user_id = ? AND id = ?", (user_id, entry_id)
+        )
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()
 

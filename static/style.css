@@ -797,6 +797,34 @@ body.red-filter::after {
   font-size: 10.5px;
   color: var(--text-muted);
 }
+.journal-row-status {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  flex: none;
+}
+.journal-row-status-seen {
+  color: #4fae6c;
+  background: rgba(79,174,108,0.13);
+}
+.journal-row-status-failed {
+  color: #c4577f;
+  background: rgba(196,87,127,0.13);
+}
+.journal-row-del {
+  flex: none;
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  display: flex; align-items: center; justify-content: center;
+}
+.journal-row-del:active { background: rgba(255,255,255,0.06); }
 .lib-empty {
   padding: 30px 20px;
   text-align: center;
@@ -1011,6 +1039,14 @@ body.red-filter::after {
 }
 .cal-day-fav i {
   font-size: 9px;
+}
+.cal-day-journal-dot {
+  position: absolute;
+  bottom: 5px;
+  left: 9px;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: #4fae6c;
 }
 
 /* ---------- Settings ---------- */
@@ -1679,6 +1715,10 @@ body.red-filter::after {
   color: var(--accent);
   border-color: var(--accent-dim);
   text-shadow: 0 0 8px rgba(212,175,106,0.6);
+}
+.info-fav-btn.journal-added {
+  color: #4fae6c;
+  border-color: rgba(79,174,108,0.4);
 }
 .info-close {
   width: 30px; height: 30px;

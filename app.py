@@ -27,6 +27,7 @@ from db import (
     delete_session, get_settings, update_settings,
     get_favorites, toggle_favorite,
     get_plan, save_plan, delete_plan, get_plan_counts,
+    add_journal_entry, get_journal, delete_journal_entry,
 )
 
 app = Flask(__name__)
@@ -372,6 +373,7 @@ def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
         "true_set_iso": true_event["set_iso"],
         "always_visible": true_event["always_visible"],
         "never_visible": true_event["never_visible"],
+        "up_now": true_event["up_now"],
     }
 
 
@@ -857,6 +859,51 @@ def agenda_favorites_count():
         day = day + timedelta(days=1)
 
     return jsonify({"counts": counts})
+
+
+@app.route("/api/journal", methods=["GET", "POST"])
+@login_required
+def journal_api():
+    """Historique des observations (vu / tentative échouée). GET renvoie
+    la liste triée du plus récent au plus ancien. POST ajoute une entrée."""
+    if request.method == "GET":
+        return jsonify({"entries": get_journal(request.user["id"])})
+
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    category = str(payload.get("category") or "")[:50]
+    status = payload.get("status") or "seen"
+    if status not in ("seen", "failed"):
+        status = "seen"
+    date_str = (payload.get("date") or "").strip()
+    if not date_str:
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    try:
+        datetime.strptime(date_str, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({"error": "date must be formatted YYYY-MM-DD"}), 400
+    time_str = (payload.get("time") or "").strip() or None
+    if time_str:
+        try:
+            datetime.strptime(time_str, "%H:%M")
+        except ValueError:
+            time_str = None
+    note = str(payload.get("note") or "")[:500]
+
+    entry_id = add_journal_entry(request.user["id"], name, category, status, date_str, time_str, note)
+    return jsonify({
+        "id": entry_id, "object_name": name, "category": category, "status": status,
+        "date": date_str, "time": time_str, "note": note,
+    })
+
+
+@app.route("/api/journal/<int:entry_id>", methods=["DELETE"])
+@login_required
+def journal_delete(entry_id):
+    ok = delete_journal_entry(request.user["id"], entry_id)
+    return jsonify({"deleted": ok})
 
 
 @app.route("/api/catalog/stats")

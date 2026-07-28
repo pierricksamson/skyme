@@ -330,6 +330,17 @@
         </div>
       </section>
 
+      <section id="view-journal" class="view hidden">
+        <div class="section-heading">
+          <h2>Journal</h2>
+          <button type="button" id="journalAddBtn" class="icon-btn" title="Ajouter une observation">
+            <i class='bx bx-plus'></i>
+          </button>
+        </div>
+        <p id="journalEmpty" class="lib-empty hidden">Aucune observation enregistrée pour l'instant.</p>
+        <div id="journalList" class="lib-list"></div>
+      </section>
+
       <section id="view-tools" class="view hidden">
         <div class="section-heading"><h2>Tools</h2></div>
 
@@ -588,6 +599,11 @@
             <span class="side-menu-item-label">Agenda</span>
             <i class='bx bx-chevron-right side-menu-item-arrow'></i>
           </button>
+          <button class="side-menu-item nav-btn" data-view="journal">
+            <span class="side-menu-item-icon"><i class='bx bx-book-content'></i></span>
+            <span class="side-menu-item-label">Journal</span>
+            <i class='bx bx-chevron-right side-menu-item-arrow'></i>
+          </button>
           <button class="side-menu-item nav-btn" data-view="plan">
             <span class="side-menu-item-icon"><i class='bx bx-list-check'></i></span>
             <span class="side-menu-item-label">Prévoir</span>
@@ -617,6 +633,9 @@
           </div>
           <button id="infoFavBtn" class="info-fav-btn" title="Ajouter aux favoris">
             <i class='bx bx-star'></i>
+          </button>
+          <button id="infoJournalBtn" class="info-fav-btn hidden" title="Ajouter à l'historique">
+            <i class='bx bx-book-content'></i>
           </button>
           <button id="infoClose" class="info-close">✕</button>
         </div>
@@ -685,6 +704,45 @@
         <div id="mapPicker" style="width:100%; height:280px; border-radius:12px; overflow:hidden; border:1px solid var(--border);"></div>
         <p class="settings-hint" style="margin-top:10px;">Touche/clique sur la carte pour placer le repère, puis valide.</p>
         <button id="mapValidate" class="login-btn" style="width:100%; margin-top:14px;">Valider cette position</button>
+      </div>
+    </div>
+
+    <div id="journalAddOverlay" class="info-overlay hidden">
+      <div class="info-sheet" style="padding-bottom: 24px;">
+        <div class="info-sheet-handle"></div>
+        <div class="info-header">
+          <div><h3 style="margin:0;">Ajouter au journal</h3></div>
+          <button id="journalAddClose" class="info-close">✕</button>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:14px; margin-top: 6px;">
+          <div>
+            <label for="journalNameInput" class="settings-hint" style="display:block; margin-bottom:6px;">Objet</label>
+            <input type="text" id="journalNameInput" class="lib-search-input" list="journalCatalogDatalist" placeholder="Nom de l'objet…" autocomplete="off">
+            <datalist id="journalCatalogDatalist"></datalist>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <label style="flex:1; display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer;">
+              <input type="radio" name="journalStatus" id="journalStatusSeen" value="seen" checked>
+              <span style="font-size:14px;">Vu</span>
+            </label>
+            <label style="flex:1; display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; cursor:pointer;">
+              <input type="radio" name="journalStatus" id="journalStatusFailed" value="failed">
+              <span style="font-size:14px;">Tentative échouée</span>
+            </label>
+          </div>
+          <div style="display:flex; gap:10px;">
+            <div style="flex:1;">
+              <label for="journalDateInput" class="settings-hint" style="display:block; margin-bottom:6px;">Date</label>
+              <input type="date" id="journalDateInput">
+            </div>
+            <div style="flex:1;">
+              <label for="journalTimeInput" class="settings-hint" style="display:block; margin-bottom:6px;">Heure (optionnel)</label>
+              <input type="time" id="journalTimeInput">
+            </div>
+          </div>
+          <p id="journalAddError" class="settings-hint hidden" style="color:#c4577f;"></p>
+          <button id="journalAddSubmit" class="login-btn" style="width:100%;">Ajouter</button>
+        </div>
       </div>
     </div>
 
