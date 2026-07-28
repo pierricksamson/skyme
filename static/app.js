@@ -225,6 +225,7 @@ function refreshSharedFilterViews() {
   let currentLon = null;
   let currentElev = 0;
   let catalogStats = null;
+  let geoUnavailable = false; // true si le GPS est refusé/indisponible : désactive l'option "auto"
 
   const today0 = new Date();
   today0.setHours(0, 0, 0, 0);
@@ -435,12 +436,16 @@ function refreshSharedFilterViews() {
     }
 
     if (!navigator.geolocation) {
+      geoUnavailable = true;
+      updateLocAutoAvailability();
       renderNoLocation('La géolocalisation n\u2019est pas supportée par ce navigateur. Définis ta position manuellement dans Paramètres.');
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        geoUnavailable = false;
+        updateLocAutoAvailability();
         const { latitude, longitude, altitude } = pos.coords;
         currentLat = latitude;
         currentLon = longitude;
@@ -450,12 +455,26 @@ function refreshSharedFilterViews() {
         fetchSky(currentLat, currentLon, currentElev);
       },
       () => {
+        geoUnavailable = true;
+        updateLocAutoAvailability();
         currentLat = null;
         currentLon = null;
         renderNoLocation('Localisation refusée ou indisponible. Active le GPS ou définis ta position manuellement dans Paramètres.');
       },
       { enableHighAccuracy: true, timeout: 15000 }
     );
+  }
+  function updateLocAutoAvailability() {
+    if (!locAutoToggle) return;
+    locAutoToggle.disabled = geoUnavailable;
+    if (geoUnavailable) {
+      // GPS refusé/indisponible : on empêche de re-sélectionner "auto" et on
+      // force l'affichage du bloc manuel tant qu'aucune position valide
+      // n'est renvoyée par le navigateur.
+      locAutoToggle.checked = false;
+      locManualBlock.classList.remove('hidden');
+      locAutoHint.textContent = 'Localisation GPS refusée ou indisponible. Définis ta position manuellement ci-dessous.';
+    }
   }
 
   // Résout la position (GPS ou manuelle) sans toucher au DOM ni déclencher
@@ -473,14 +492,22 @@ function refreshSharedFilterViews() {
         return;
       }
 
-      if (!navigator.geolocation) { resolve(null); return; }
+      if (!navigator.geolocation) {
+        geoUnavailable = true;
+        resolve(null);
+        return;
+      }
 
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          geoUnavailable = false;
           const { latitude, longitude, altitude } = pos.coords;
           resolve({ lat: latitude, lon: longitude, elev: altitude || 0 });
         },
-        () => resolve(null),
+        () => {
+          geoUnavailable = true;
+          resolve(null);
+        },
         { enableHighAccuracy: true, timeout: 15000 }
       );
     });
@@ -1947,12 +1974,15 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     if (locSaveBtn) {
       locSaveBtn.style.display = 'none';
     }
-    const auto = settingsCache.loc_mode !== 'manual';
+    const auto = settingsCache.loc_mode !== 'manual' && !geoUnavailable;
     locAutoToggle.checked = auto;
+    locAutoToggle.disabled = geoUnavailable;
     locManualBlock.classList.toggle('hidden', auto);
-    locAutoHint.textContent = auto
-      ? 'L\u2019application utilise la position GPS de l\u2019appareil.'
-      : 'Position définie manuellement ci-dessous.';
+    locAutoHint.textContent = geoUnavailable
+      ? 'Localisation GPS refusée ou indisponible. Définis ta position manuellement ci-dessous.'
+      : auto
+        ? 'L\u2019application utilise la position GPS de l\u2019appareil.'
+        : 'Position définie manuellement ci-dessous.';
 
     if (settingsCache.loc_lat !== null && settingsCache.loc_lat !== undefined) {
       locLatInput.value = settingsCache.loc_lat;

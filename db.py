@@ -29,6 +29,10 @@ DEFAULT_SETTINGS = {
     "pref_fixed_end": "06:00",
     "pref_min_alt": 10.0,
     "red_filter": False,
+    "loc_mode": "auto",
+    "loc_lat": None,
+    "loc_lon": None,
+    "loc_elev": 0.0,
 }
 
 # Type attendu pour chaque paramètre modifiable via /api/settings
@@ -41,6 +45,10 @@ ALLOWED_SETTINGS = {
     "pref_fixed_end": str,
     "pref_min_alt": float,
     "red_filter": bool,
+    "loc_mode": str,
+    "loc_lat": float,
+    "loc_lon": float,
+    "loc_elev": float,
 }
 
 
@@ -80,6 +88,10 @@ def init_db():
                 pref_fixed_end TEXT NOT NULL DEFAULT '06:00',
                 pref_min_alt REAL NOT NULL DEFAULT 10.0,
                 red_filter INTEGER NOT NULL DEFAULT 0,
+                loc_mode TEXT NOT NULL DEFAULT 'auto',
+                loc_lat REAL,
+                loc_lon REAL,
+                loc_elev REAL NOT NULL DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
 
@@ -117,6 +129,21 @@ def init_db():
                 ON journal(user_id, date);
             """
         )
+        existing_cols = {
+            row["name"] for row in conn.execute("PRAGMA table_info(settings)")
+        }
+
+        migrations = {
+            "loc_mode": "ALTER TABLE settings ADD COLUMN loc_mode TEXT NOT NULL DEFAULT 'auto'",
+            "loc_lat": "ALTER TABLE settings ADD COLUMN loc_lat REAL",
+            "loc_lon": "ALTER TABLE settings ADD COLUMN loc_lon REAL",
+            "loc_elev": "ALTER TABLE settings ADD COLUMN loc_elev REAL NOT NULL DEFAULT 0",
+        }
+
+        for col, ddl in migrations.items():
+            if col not in existing_cols:
+                conn.execute(ddl)
+
         conn.commit()
     finally:
         conn.close()
