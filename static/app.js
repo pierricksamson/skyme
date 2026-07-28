@@ -1273,15 +1273,17 @@ function assignLanesClient(objects) {
 
     titleEl.textContent = dateObj.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
     closeBtn.classList.remove('hidden');
-    openBtn.classList.remove('hidden');
-    const planBtn = document.getElementById('agendaDayPlanBtn');
-    if (planBtn) {
-      const hasPlan = !!planDatesWithPlan[dateStr];
-      planBtn.classList.toggle('hidden', !hasPlan);
-      planBtn.onclick = () => {
-        switchView('plan');
-        loadPlan(dateStr);
-      };
+    const isPast = dateObj < today0;
+  openBtn.classList.toggle('hidden', isPast);
+
+  const planBtn = document.getElementById('agendaDayPlanBtn');
+  if (planBtn) {
+    const hasPlan = !!planDatesWithPlan[dateStr];
+    planBtn.classList.toggle('hidden', !hasPlan);
+    planBtn.onclick = () => {
+      switchView('plan');
+      loadPlan(dateStr);
+    };
     }
     listEl.innerHTML = loadingBlockHtml('Chargement…');
 
@@ -1366,9 +1368,15 @@ function closeAgendaDayPreview() {
 
   document.getElementById('agendaDayOpenBtn').addEventListener('click', () => {
     if (!agendaPreviewDate) return;
+    // Ouvrir la nuit "en cours" (aujourd'hui) depuis l'agenda redirige vers
+    // la Timeline principale plutôt que d'ouvrir une timetable dédiée dans
+    // l'agenda, qui ferait doublon avec l'onglet Timeline.
+    if (agendaPreviewDate.dateStr === toDateStr(today0)) {
+      switchView('timeline');
+      return;
+    }
     openAgendaTimetable(agendaPreviewDate.dateObj);
   });
-
   function openAgendaTimetable(dateObj) {
     agendaTtDateObj = new Date(dateObj);
     document.getElementById('agendaMainView').classList.add('hidden');
@@ -1498,8 +1506,6 @@ function closeAgendaDayPreview() {
     hours.innerHTML = '';
     lanes.innerHTML = '';
 
-    // Même logique que renderTimeline : pas de recalcul du fit sur un
-    // simple changement de filtre.
     if (agendaZoomMode === 'auto' && recomputeZoom) {
       agendaZoomLevel = computeAgendaFitZoom(data);
     }
@@ -1539,7 +1545,16 @@ function closeAgendaDayPreview() {
       hours.appendChild(label);
     }
 
-    const laneCount = Math.max(data.lane_count || 1, 1);
+    // Filtre d'abord, puis réassigne des voies compactes uniquement sur les
+    // objets visibles (même logique que renderTimeline) : sinon data.lane_count
+    // / o.lane (calculés côté serveur sur TOUS les objets de la nuit) laissaient
+    // des colonnes vides ou un mauvais nombre de voies dès qu'un filtre était
+    // appliqué, d'où le comportement de zoom horizontal erratique.
+    const visibleObjects = filterObjects(data.objects, agendaFilterState);
+    updateFilterCount('agendaFilterCount', data.objects.length, visibleObjects.length);
+
+    const { laneOf, laneCount: computedLaneCount } = assignLanesClient(visibleObjects);
+    const laneCount = Math.max(computedLaneCount, 1);
     const availableWidth = lanesScroll.clientWidth || 300;
     const laneWidth = availableWidth / laneCount;
     const narrow = laneWidth < 64;
@@ -1552,10 +1567,8 @@ function closeAgendaDayPreview() {
       lanes.appendChild(col);
     }
 
-    const visibleObjects = filterObjects(data.objects, agendaFilterState);
-    updateFilterCount('agendaFilterCount', data.objects.length, visibleObjects.length);
-
     visibleObjects.forEach((o) => {
+      const lane = laneOf.get(o);
       const rise = new Date(o.rise_iso).getTime();
       const set = new Date(o.set_iso).getTime();
       const topPx = ((rise - start) / 60000) * pxPerMin;
@@ -1566,7 +1579,7 @@ function closeAgendaDayPreview() {
       block.className = 'block' + (narrow ? ' block-narrow' : '') + (fav ? ' block-favorite' : '');
       block.style.top = `${topPx}px`;
       block.style.height = `${heightPx}px`;
-      block.style.left = `${o.lane * laneWidth + 2}px`;
+      block.style.left = `${lane * laneWidth + 2}px`;
       block.style.width = `${Math.max(laneWidth - 4, 4)}px`;
       block.style.background = o.color;
 
@@ -1651,15 +1664,42 @@ function closeAgendaDayPreview() {
   });
 
   document.getElementById('agendaTtPrev').addEventListener('click', () => {
-    if (!agendaTtDateObj || agendaTtDateObj <= today0) return;
-    agendaTtDateObj.setDate(agendaTtDateObj.getDate() - 1);
-    loadAgendaTimetable();
-  });
-  document.getElementById('agendaTtNext').addEventListener('click', () => {
-    if (!agendaTtDateObj) return;
-    agendaTtDateObj.setDate(agendaTtDateObj.getDate() + 1);
-    loadAgendaTimetable();
-  });
+  if (!agendaTtDateObj) return;
+
+  // Empêche de remonter au-delà de la première date autorisée dans l'agenda
+  if (agendaTtDateObj <= agendaFirstDay) return;
+
+  // On recule d'un jour
+  agendaTtDateObj.setDate(agendaTtDateObj.getDate() - 1);
+
+  // Si on retombe sur aujourd'hui, on bascule vers la vue Timeline principale
+  if (toDateStr(agendaTtDateObj) === toDateStr(today0)) {
+    closeAgendaTimetable();
+    switchView('timeline');
+    return;
+  }
+
+  loadAgendaTimetable();
+});
+
+document.getElementById('agendaTtNext').addEventListener('click', () => {
+  if (!agendaTtDateObj) return;
+
+  // Empêche d'aller au-delà de la dernière date disponible dans l'agenda
+  if (agendaTtDateObj >= agendaLastDay) return;
+
+  // On avance d'un jour
+  agendaTtDateObj.setDate(agendaTtDateObj.getDate() + 1);
+
+  // Si on repasse par aujourd'hui
+  if (toDateStr(agendaTtDateObj) === toDateStr(today0)) {
+    closeAgendaTimetable();
+    switchView('timeline');
+    return;
+  }
+
+  loadAgendaTimetable();
+});
   document.getElementById('agendaTtClose').addEventListener('click', closeAgendaTimetable);
 
   // Récupère, pour toute la plage de l'agenda, le nombre d'objets favoris
