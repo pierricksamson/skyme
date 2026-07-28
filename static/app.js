@@ -1113,9 +1113,9 @@ function assignLanesClient(objects) {
         ? `<span class="cal-day-fav"><i class='bx bxs-star'></i>${favCount}</span>`
         : '';
       const hasPlan = !!planDatesWithPlan[dateStr];
-      const planBadge = hasPlan ? `<span class="cal-day-plan"><i class='bx bxs-list-check'></i></span>` : '';
+      const dotClass = hasPlan ? 'cal-day-dot cal-day-dot-plan' : 'cal-day-dot';
 
-      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${planBadge}${inRange ? '<span class="cal-day-dot"></span>' : ''}`;
+      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${inRange ? `<span class="${dotClass}"></span>` : ''}`;
       if (inRange) cell.addEventListener('click', () => openAgendaDay(dateStr, d));
       grid.appendChild(cell);
     }

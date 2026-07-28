@@ -10,6 +10,7 @@
 <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
 <body>
   <div class="app">
@@ -276,7 +277,7 @@
 
           <div style="display:flex; gap:10px; margin:14px 0 24px;">
             <button id="planSaveBtn" type="button" class="login-btn" style="flex:1;">Enregistrer le plan</button>
-            <button id="planDeleteBtn" type="button" class="settings-discard-btn hidden" style="flex:none;">Supprimer</button>
+            <button id="planDeleteBtn" type="button" class="settings-discard-btn hidden" style="flex:none; margin-top: 20px;">Supprimer</button>
           </div>
 
           <div class="section-heading"><h2>Ajouter des objets</h2></div>

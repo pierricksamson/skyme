@@ -988,6 +988,9 @@ body.red-filter::after {
   border-radius: 50%;
   background: var(--accent);
 }
+.cal-day-dot-plan {
+  background: var(--c-galaxy);
+}
 .cal-day-fav {
   position: absolute;
   top: -5px;
@@ -1750,18 +1753,4 @@ body.red-filter::after {
 .lib-row-plan-toggle.active {
   box-shadow: inset 0 0 0 1.5px var(--accent);
   background: rgba(212,175,106,0.06);
-}
-.cal-day-plan {
-  position: absolute;
-  top: -5px;
-  left: -5px;
-  display: flex;
-  align-items: center;
-  background: var(--c-galaxy);
-  color: #10100e;
-  border-radius: 999px;
-  padding: 2px 5px;
-  font-size: 9px;
-  line-height: 1;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.35);
 }
