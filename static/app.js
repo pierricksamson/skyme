@@ -3564,6 +3564,7 @@ document.addEventListener('click', (e) => {
   // Sinon (il n'a que des entrées 'failed'), c'est un échec
   return 'failed';
 }
+  switchView('overview')
   initApp();
   resetZoomToFit();
 })();
