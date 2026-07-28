@@ -560,23 +560,36 @@
         <i class='bx bx-book-open'></i>
         <span>Library</span>
       </button>
-      <button class="nav-btn" data-view="agenda">
-        <i class='bx bx-calendar'></i>
-        <span>Agenda</span>
-      </button>
-      <button class="nav-btn" data-view="plan">
-        <i class='bx bx-list-check'></i>
-        <span>Prévoir</span>
-      </button>
-      <button class="nav-btn" data-view="tools">
-        <i class='bx bx-wrench'></i>
-        <span>Tools</span>
-      </button>
       <button class="nav-btn" data-view="settings">
         <i class='bx bx-cog'></i>
         <span>Settings</span>
       </button>
+      <button type="button" id="menuNavBtn" class="nav-btn" data-menu-btn>
+        <i class='bx bx-menu'></i>
+        <span>Menu</span>
+      </button>
     </nav>
+
+    <div id="sideMenuOverlay" class="side-menu-overlay hidden">
+      <nav id="sideMenu" class="side-menu">
+        <div class="side-menu-header">
+          <span class="side-menu-title">Menu</span>
+          <button type="button" id="sideMenuClose" class="side-menu-close">✕</button>
+        </div>
+        <button class="side-menu-item nav-btn" data-view="agenda">
+          <i class='bx bx-calendar'></i>
+          <span>Agenda</span>
+        </button>
+        <button class="side-menu-item nav-btn" data-view="plan">
+          <i class='bx bx-list-check'></i>
+          <span>Prévoir</span>
+        </button>
+        <button class="side-menu-item nav-btn" data-view="tools">
+          <i class='bx bx-wrench'></i>
+          <span>Tools</span>
+        </button>
+      </nav>
+    </div>
 
     <div id="infoOverlay" class="info-overlay hidden">
       <div class="info-sheet">

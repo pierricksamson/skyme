@@ -1008,10 +1008,13 @@ function assignLanesClient(objects) {
     if (e.target.id === 'infoOverlay') closeInfo();
   });
 
+  let currentView = 'timeline';
   function switchView(name) {
+    currentView = name;
     document.querySelectorAll('.view').forEach((v) => v.classList.add('hidden'));
     document.getElementById(`view-${name}`).classList.remove('hidden');
-    document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+    document.querySelectorAll('.nav-btn[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+    if (menuNavBtn) menuNavBtn.classList.toggle('active', ['agenda', 'plan', 'tools'].includes(name));
     if (name === 'timeline' && currentData) {
       renderTimeline(currentData);
       positionNowLine(currentData);
@@ -1035,8 +1038,38 @@ function assignLanesClient(objects) {
     }
   }
 
-  document.querySelectorAll('.nav-btn').forEach((btn) => {
+  document.querySelectorAll('.nav-btn[data-view]').forEach((btn) => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
+  });
+
+  // ---------- Side menu (drawer gauche : Agenda / Prévoir / Tools) ----------
+  const sideMenuOverlay = document.getElementById('sideMenuOverlay');
+  const menuNavBtn = document.getElementById('menuNavBtn');
+  const sideMenuClose = document.getElementById('sideMenuClose');
+
+  function openSideMenu() {
+    if (!sideMenuOverlay) return;
+    document.querySelectorAll('#sideMenu .side-menu-item').forEach((b) => {
+      b.classList.toggle('active', b.dataset.view === currentView);
+    });
+    sideMenuOverlay.classList.remove('hidden');
+  }
+  function closeSideMenu() {
+    if (sideMenuOverlay) sideMenuOverlay.classList.add('hidden');
+  }
+
+  if (menuNavBtn) menuNavBtn.addEventListener('click', openSideMenu);
+  if (sideMenuClose) sideMenuClose.addEventListener('click', closeSideMenu);
+  if (sideMenuOverlay) {
+    sideMenuOverlay.addEventListener('click', (e) => {
+      if (e.target.id === 'sideMenuOverlay') closeSideMenu();
+    });
+  }
+  document.querySelectorAll('#sideMenu .side-menu-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      switchView(btn.dataset.view);
+      closeSideMenu();
+    });
   });
 
   refreshBtn.addEventListener('click', resolveLocation);
