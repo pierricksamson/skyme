@@ -2097,6 +2097,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const confirmMinAltInput = document.getElementById('confirmMinAltInput');
 
   function populateConfirmPanel() {
+    document.getElementById('header').style.display = "none";
     const auto = settingsCache.loc_mode !== 'manual';
     confirmLocAutoToggle.checked = auto;
     confirmLocManualBlock.classList.toggle('hidden', auto);
@@ -2124,6 +2125,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   }
 
   function onConfirmModeChange() {
+    document.getElementById('header').style.display = "sticky";
     const fixed = confirmModeFixed.checked;
     confirmMarginInput.disabled = fixed;
     confirmFixedStartInput.disabled = !fixed;

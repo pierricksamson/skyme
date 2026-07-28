@@ -15,7 +15,7 @@
 <body>
   <div class="app">
 
-    <header class="topbar" style="position: sticky; top: 0; background-color: rgba(9, 9, 10, 0.92); z-index: 999;">
+    <header id="header" class="topbar" style="position: sticky; top: 0; background-color: rgba(9, 9, 10, 0.92); z-index: 999;">
       <div class="brand">
         <span class="brand-mark">✦</span>
         <span class="brand-word">Skyme</span>
@@ -23,7 +23,7 @@
       <button id="refreshBtn" class="icon-btn" title="Refresh">⟳</button>
     </header>
 
-    <section id="confirmPanel" class="status-panel">
+    <section id="confirmPanel" class="status-panel" style="z-index: 0;">
       <div style="width:100%; max-width:340px; display:flex; flex-direction:column; gap:16px; text-align:left; max-height: 90vh; overflow-y:auto; padding: 4px 4px 24px;">
         <div style="text-align:center;">
           <span class="brand-mark">✦</span> <span class="brand-word" style="font-size:20px;">Skyme</span>
@@ -40,7 +40,7 @@
             </span>
           </label>
           <div id="confirmLocManualBlock" class="hidden" style="display:flex; flex-direction:column; gap:10px;">
-            <button type="button" id="confirmLocMapBtn" class="retry-btn" style="align-self:flex-start;">Choisir sur la carte</button>
+            <button type="button" id="confirmLocMapBtn" class="retry-btn" style="align-self:flex-start; width: 100%;">Choisir sur la carte</button>
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <div style="display:flex; flex-direction:column; gap:4px;">
                 <label style="font-size:11px; color:#aaa;">Latitude</label>
