@@ -2175,6 +2175,7 @@ function assignLanesClient(objects) {
 
     updatePlanStatusLine();
     updatePlanDeleteBtn();
+    updatePlanOpenTimelineBtn();
     renderPlanSelectedList();
     await renderPlanCatalogList();
   }
@@ -2184,6 +2185,7 @@ function assignLanesClient(objects) {
     else planSelectedNames.add(name);
     renderPlanSelectedList();
     renderPlanCatalogList();
+    updatePlanOpenTimelineBtn();
   }
 
   async function savePlan() {
@@ -2224,6 +2226,7 @@ function assignLanesClient(objects) {
     renderPlanCatalogList();
     updatePlanStatusLine();
     updatePlanDeleteBtn();
+    updatePlanOpenTimelineBtn();
     loadPlanDatesRange();
   }
 
@@ -2355,6 +2358,322 @@ function assignLanesClient(objects) {
       // silencieux : le badge est un bonus, pas une fonctionnalité bloquante
     }
   }
+
+  // ---------- Timeline du plan : n'affiche que les objets choisis pour la
+  // nuit prévue, avec la now-line si on est aujourd'hui et dans la bonne
+  // plage horaire (même logique que la timetable de l'agenda). ----------
+  let planTtData = null;
+  let planTlZoomMode = 'auto';
+  let planTlZoomLevel = 1;
+
+  function updatePlanOpenTimelineBtn() {
+    const btn = document.getElementById('planOpenTimelineBtn');
+    if (btn) btn.classList.toggle('hidden', planSelectedNames.size === 0);
+  }
+
+  function positionPlanTtLoadingOverlay() {
+    const overlay = document.getElementById('planTtLoadingOverlay');
+    if (!overlay) return;
+    const topbar = document.querySelector('.topbar');
+    const topbarH = topbar ? topbar.offsetHeight : 0;
+    const navH = bottomNav ? bottomNav.offsetHeight : 0;
+    overlay.style.top = `${topbarH}px`;
+    overlay.style.bottom = `${navH}px`;
+  }
+
+  function showPlanTtLoading(msg) {
+    const overlay = document.getElementById('planTtLoadingOverlay');
+    const text = document.getElementById('planTtLoadingText');
+    if (!overlay) return;
+    if (text && msg) text.textContent = msg;
+    positionPlanTtLoadingOverlay();
+    overlay.classList.remove('hidden');
+  }
+
+  function hidePlanTtLoading() {
+    const overlay = document.getElementById('planTtLoadingOverlay');
+    if (overlay) overlay.classList.add('hidden');
+  }
+
+  function openPlanTimetable() {
+    if (planSelectedNames.size === 0) return;
+    document.getElementById('planMainView').classList.add('hidden');
+    document.getElementById('planTimetableView').classList.remove('hidden');
+    planTlZoomMode = 'auto';
+    loadPlanTimetable();
+  }
+
+  function closePlanTimetable() {
+    hidePlanTtLoading();
+    document.getElementById('planTimetableView').classList.add('hidden');
+    document.getElementById('planMainView').classList.remove('hidden');
+  }
+
+  async function loadPlanTimetable() {
+    const dateStr = planCurrentDate;
+    const dateLabel = document.getElementById('planTtDate');
+    const hours = document.getElementById('planTlHours');
+    const wrap = document.getElementById('planTlWrap');
+    const lanes = document.getElementById('planTlLanes');
+
+    const d = new Date(dateStr);
+    dateLabel.textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+
+    hours.innerHTML = '';
+    wrap.style.height = '220px';
+    lanes.style.height = '220px';
+    lanes.style.backgroundImage = 'none';
+    lanes.innerHTML = '';
+    ['planSunsetLine', 'planSunriseLine', 'planNowLine'].forEach((id) => {
+      document.getElementById(id).style.display = 'none';
+    });
+    const countEl = document.getElementById('planTtCount');
+    if (countEl) countEl.textContent = '';
+    showPlanTtLoading('Chargement du programme…');
+
+    try {
+      const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+
+      if (planCurrentDate !== dateStr) return;
+
+      planTtData = data;
+      hidePlanTtLoading();
+      const visible = (data.objects || []).filter((o) => planSelectedNames.has(o.name));
+      if (visible.length === 0) {
+        lanes.innerHTML = '<div class="lib-empty">Aucun des objets prévus n\u2019est visible cette nuit-là.</div>';
+        if (countEl) countEl.textContent = 'Aucun objet visible';
+      } else {
+        renderPlanTimeline(data);
+        positionPlanNowLine(data);
+        positionPlanSunLines(data);
+      }
+    } catch (e) {
+      if (planCurrentDate === dateStr) {
+        hidePlanTtLoading();
+        lanes.innerHTML = '<div class="lib-empty">Impossible de charger le programme.</div>';
+      }
+    }
+  }
+
+  // Réimplémentation JS de assign_lanes() (app.py) : coloration gloutonne
+  // d'intervalles pour ne pas superposer deux objets qui se chevauchent,
+  // mais sur un sous-ensemble d'objets seulement (compacte les numéros de
+  // lane pour éviter les colonnes vides quand on filtre).
+  function assignCompactLanes(objects) {
+    const sorted = [...objects].sort((a, b) => new Date(a.rise_iso) - new Date(b.rise_iso));
+    const laneEndIso = [];
+    return sorted.map((o) => {
+      let placed = false;
+      let lane = laneEndIso.length;
+      for (let i = 0; i < laneEndIso.length; i++) {
+        if (o.rise_iso >= laneEndIso[i]) {
+          lane = i;
+          laneEndIso[i] = o.set_iso;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) laneEndIso.push(o.set_iso);
+      return { ...o, lane };
+    });
+  }
+
+  function computePlanFitZoom(data) {
+    const wrap = document.getElementById('planTlWrap');
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const totalMin = (end - start) / 60000;
+    if (!totalMin || totalMin <= 0) return 1;
+
+    const navH = bottomNav ? bottomNav.offsetHeight : 0;
+    const wrapTop = wrap.getBoundingClientRect().top;
+    const buffer = 20;
+    const availableHeight = Math.max(window.innerHeight - wrapTop - navH - buffer, 100);
+
+    const fit = (availableHeight - 20) / (totalMin * BASE_PX_PER_MIN);
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  }
+
+  function renderPlanTimeline(data, recomputeZoom = true) {
+    const hours = document.getElementById('planTlHours');
+    const lanesScroll = document.getElementById('planTlLanesScroll');
+    const lanes = document.getElementById('planTlLanes');
+    const wrap = document.getElementById('planTlWrap');
+    hours.innerHTML = '';
+    lanes.innerHTML = '';
+
+    if (planTlZoomMode === 'auto' && recomputeZoom) {
+      planTlZoomLevel = computePlanFitZoom(data);
+    }
+    const fitBtn = document.getElementById('planZoomFit');
+    if (fitBtn) fitBtn.classList.toggle('active', planTlZoomMode === 'auto');
+
+    const pxPerMin = BASE_PX_PER_MIN * planTlZoomLevel;
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const totalMin = (end - start) / 60000;
+    const totalPx = Math.max(totalMin * pxPerMin, 300);
+    const hourPx = 60 * pxPerMin;
+
+    hours.style.height = `${totalPx}px`;
+    lanes.style.height = `${totalPx}px`;
+    wrap.style.height = `${totalPx + 15}px`;
+
+    let tickMinutes = 60;
+    if (hourPx >= 260) tickMinutes = 15;
+    else if (hourPx >= 130) tickMinutes = 30;
+    else if (hourPx < 34) tickMinutes = 120;
+    lanes.style.backgroundSize = `100% ${tickMinutes * pxPerMin}px`;
+
+    const firstTick = new Date(start);
+    const rem = firstTick.getMinutes() % tickMinutes;
+    firstTick.setSeconds(0, 0);
+    if (rem !== 0) firstTick.setMinutes(firstTick.getMinutes() + (tickMinutes - rem));
+    else if (firstTick.getTime() < start) firstTick.setMinutes(firstTick.getMinutes() + tickMinutes);
+
+    for (let t = firstTick.getTime(); t <= end; t += tickMinutes * 60000) {
+      const topPx = ((t - start) / 60000) * pxPerMin;
+      const label = document.createElement('div');
+      label.className = 'tl-hour-label';
+      if (tickMinutes < 60 && new Date(t).getMinutes() !== 0) label.classList.add('tl-hour-label-minor');
+      label.style.top = `${topPx}px`;
+      label.textContent = new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      hours.appendChild(label);
+    }
+
+    // Ne garde que les objets choisis pour ce plan : c'est tout l'intérêt
+    // de cette timeline dédiée par rapport à celle de l'agenda. Les lanes
+    // renvoyées par le serveur sont calculées sur TOUS les objets de la
+    // nuit ; une fois filtrés sur la sélection du plan, elles seraient
+    // éparses (ex: lane 0 et lane 6 sur 8) et laisseraient des colonnes
+    // vides. On réassigne donc des lanes compactes, localement, en ne
+    // tenant compte que des objets affichés, pour occuper toute la largeur.
+    const rawVisible = (data.objects || []).filter((o) => planSelectedNames.has(o.name));
+    const visibleObjects = assignCompactLanes(rawVisible);
+    const countEl = document.getElementById('planTtCount');
+    if (countEl) {
+      countEl.textContent = `${visibleObjects.length} objet${visibleObjects.length > 1 ? 's' : ''} prévu${visibleObjects.length > 1 ? 's' : ''}`;
+    }
+
+    const laneCount = Math.max(visibleObjects.reduce((max, o) => Math.max(max, o.lane + 1), 0), 1);
+    const availableWidth = lanesScroll.clientWidth || 300;
+    const laneWidth = availableWidth / laneCount;
+    const narrow = laneWidth < 64;
+
+    for (let i = 0; i < laneCount; i++) {
+      const col = document.createElement('div');
+      col.className = 'lane-col';
+      col.style.left = `${i * laneWidth}px`;
+      col.style.width = `${laneWidth}px`;
+      lanes.appendChild(col);
+    }
+
+    visibleObjects.forEach((o) => {
+      const rise = new Date(o.rise_iso).getTime();
+      const set = new Date(o.set_iso).getTime();
+      const topPx = ((rise - start) / 60000) * pxPerMin;
+      const heightPx = Math.max(((set - rise) / 60000) * pxPerMin, 22);
+
+      const fav = isFavorite(o.name);
+      const block = document.createElement('div');
+      block.className = 'block' + (narrow ? ' block-narrow' : '') + (fav ? ' block-favorite' : '');
+      block.style.top = `${topPx}px`;
+      block.style.height = `${heightPx}px`;
+      block.style.left = `${o.lane * laneWidth + 2}px`;
+      block.style.width = `${Math.max(laneWidth - 4, 4)}px`;
+      block.style.background = o.color;
+
+      const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '';
+      const subLine = narrow ? '' : `<span class="b-sub">${o.peak_altitude}° ${magStr}</span>`;
+      const favBadge = fav ? `<span class="b-fav">★</span>` : '';
+      block.innerHTML = `${favBadge}<span class="b-name">${o.name}</span>${subLine}`;
+      block.title = `${o.name} — ${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}, alt ${o.peak_altitude}°${magStr ? ', ' + magStr : ''}`;
+      block.addEventListener('click', () => openInfo(o));
+
+      lanes.appendChild(block);
+    });
+
+    const pctEl = document.getElementById('planZoomPct');
+    if (pctEl) pctEl.textContent = `${Math.round(planTlZoomLevel * 100)}%`;
+  }
+
+  function positionPlanNowLine(data) {
+    const nowLine = document.getElementById('planNowLine');
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const now = Date.now();
+    if (now < start || now > end) {
+      nowLine.style.display = 'none';
+      return;
+    }
+    nowLine.style.display = 'block';
+    const pxPerMin = BASE_PX_PER_MIN * planTlZoomLevel;
+    nowLine.style.top = `${((now - start) / 60000) * pxPerMin}px`;
+  }
+
+  function positionPlanSunLines(data) {
+    const sunsetLine = document.getElementById('planSunsetLine');
+    const sunriseLine = document.getElementById('planSunriseLine');
+    const pxPerMin = BASE_PX_PER_MIN * planTlZoomLevel;
+    const start = new Date(data.window_start).getTime();
+    const end = new Date(data.window_end).getTime();
+    const sunset = new Date(data.sunset).getTime();
+    const sunrise = new Date(data.sunrise).getTime();
+
+    [
+      [sunsetLine, sunset],
+      [sunriseLine, sunrise],
+    ].forEach(([el, t]) => {
+      if (t < start || t > end) {
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = 'block';
+      el.style.top = `${((t - start) / 60000) * pxPerMin}px`;
+    });
+  }
+
+  function setPlanZoom(newZoom) {
+    if (!planTtData) return;
+    planTlZoomMode = 'manual';
+    planTlZoomLevel = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, newZoom));
+    renderPlanTimeline(planTtData);
+    positionPlanNowLine(planTtData);
+    positionPlanSunLines(planTtData);
+  }
+
+  function resetPlanZoomToFit() {
+    if (!planTtData) return;
+    planTlZoomMode = 'auto';
+    renderPlanTimeline(planTtData);
+    positionPlanNowLine(planTtData);
+    positionPlanSunLines(planTtData);
+  }
+
+  const planOpenTimelineBtnEl = document.getElementById('planOpenTimelineBtn');
+  if (planOpenTimelineBtnEl) planOpenTimelineBtnEl.addEventListener('click', openPlanTimetable);
+  const planTtCloseEl = document.getElementById('planTtClose');
+  if (planTtCloseEl) planTtCloseEl.addEventListener('click', closePlanTimetable);
+  const planZoomFitEl = document.getElementById('planZoomFit');
+  if (planZoomFitEl) planZoomFitEl.addEventListener('click', resetPlanZoomToFit);
+  const planZoomInEl = document.getElementById('planZoomIn');
+  if (planZoomInEl) planZoomInEl.addEventListener('click', () => setPlanZoom(planTlZoomLevel + 0.25));
+  const planZoomOutEl = document.getElementById('planZoomOut');
+  if (planZoomOutEl) planZoomOutEl.addEventListener('click', () => setPlanZoom(planTlZoomLevel - 0.25));
+
+  let planNowLineTimer = setInterval(() => {
+    if (planTtData && !document.getElementById('planTimetableView').classList.contains('hidden')) {
+      positionPlanNowLine(planTtData);
+    }
+  }, 30000);
+
+  window.addEventListener('resize', () => {
+    const overlay = document.getElementById('planTtLoadingOverlay');
+    if (overlay && !overlay.classList.contains('hidden')) positionPlanTtLoadingOverlay();
+  });
 
   // ========================================================================
   // ---------- Tools: Compass / Level / Polar Clock ----------
