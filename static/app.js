@@ -1191,7 +1191,9 @@ function refreshSharedFilterViews() {
     magClearId: 'tlFilterMagClear',
     countId: 'tlFilterCount',
     filterState: tlFilterState,
-    onChange: () => { if (currentData) renderTimeline(currentData, false); },
+    onChange: refreshSharedFilterViews,
+    linkedChipSelectors: ['.schedule-filter-chip'],
+    linkedMagInputIds: ['scheduleFilterMag'],
   });
 
   wireFilterPanel({
@@ -2313,10 +2315,10 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     });
   }
 
-  document.querySelectorAll('.lib-chip').forEach((chip) => {
+  document.querySelectorAll('.lib-filter-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       libActiveCategory = chip.dataset.cat;
-      document.querySelectorAll('.lib-chip').forEach((c) => c.classList.toggle('active', c === chip));
+      document.querySelectorAll('.lib-filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
       renderLibraryList();
     });
   });
@@ -3569,4 +3571,3 @@ document.addEventListener('click', (e) => {
 function loadingBlockHtml(msg, abs = false) {
   return `<div class="locked-state${abs ? ' locked-state-abs' : ''}"><div class="spinner"></div><p>${msg}</p></div>`;
 }
-
