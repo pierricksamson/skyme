@@ -1017,7 +1017,18 @@ function assignLanesClient(objects) {
     updateInfoFavBtn();
   });
 
-  document.getElementById('infoJournalBtn').addEventListener('click', async () => {
+  const infoJournalChoiceOverlay = document.getElementById('infoJournalChoiceOverlay');
+
+  function openInfoJournalChoice() {
+    if (!infoObj || !infoJournalChoiceOverlay) return;
+    infoJournalChoiceOverlay.classList.remove('hidden');
+  }
+
+  function closeInfoJournalChoice() {
+    if (infoJournalChoiceOverlay) infoJournalChoiceOverlay.classList.add('hidden');
+  }
+
+  async function submitInfoJournalChoice(status) {
     if (!infoObj) return;
     const btn = document.getElementById('infoJournalBtn');
     const now = new Date();
@@ -1025,10 +1036,11 @@ function assignLanesClient(objects) {
       await addJournalEntry({
         name: infoObj.name,
         category: infoObj.category,
-        status: 'seen',
+        status,
         date: toDateStr(now),
         time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
       });
+      closeInfoJournalChoice();
       btn.classList.add('journal-added');
       const icon = btn.querySelector('i');
       if (icon) icon.className = 'bx bx-check';
@@ -1039,7 +1051,17 @@ function assignLanesClient(objects) {
     } catch (e) {
       // best effort
     }
+  }
+
+  document.getElementById('infoJournalBtn').addEventListener('click', () => {
+    openInfoJournalChoice();
   });
+  document.getElementById('infoJournalChoiceClose').addEventListener('click', closeInfoJournalChoice);
+  infoJournalChoiceOverlay.addEventListener('click', (e) => {
+    if (e.target.id === 'infoJournalChoiceOverlay') closeInfoJournalChoice();
+  });
+  document.getElementById('infoJournalChoiceSeen').addEventListener('click', () => submitInfoJournalChoice('seen'));
+  document.getElementById('infoJournalChoiceFailed').addEventListener('click', () => submitInfoJournalChoice('failed'));
 
   document.getElementById('infoClose').addEventListener('click', closeInfo);
   document.getElementById('infoOverlay').addEventListener('click', (e) => {
@@ -1188,11 +1210,14 @@ function assignLanesClient(objects) {
       const hasPlan = !!planDatesWithPlan[dateStr];
       const dotClass = hasPlan ? 'cal-day-dot cal-day-dot-plan' : 'cal-day-dot';
       const isPast = d < today0;
-      const journalDot = (isPast && journalDatesSet.has(dateStr))
-        ? '<span class="cal-day-journal-dot" title="Observations enregistrées"></span>'
+      const hasJournal = isPast && journalDatesSet.has(dateStr);
+      const planDotHtml = inRange ? `<span class="${dotClass}"></span>` : '';
+      const journalDotHtml = hasJournal ? '<span class="cal-day-dot cal-day-journal-dot" title="Observations enregistrées"></span>' : '';
+      const dotsHtml = (planDotHtml || journalDotHtml)
+        ? `<span class="cal-day-dots">${planDotHtml}${journalDotHtml}</span>`
         : '';
 
-      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${inRange ? `<span class="${dotClass}"></span>` : ''}${journalDot}`;
+      cell.innerHTML = `<span class="cal-day-num">${d.getDate()}</span>${favBadge}${dotsHtml}`;
       if (inRange) cell.addEventListener('click', () => openAgendaDay(dateStr, d));
       grid.appendChild(cell);
     }
@@ -2526,6 +2551,17 @@ function assignLanesClient(objects) {
   const journalDateInput = document.getElementById('journalDateInput');
   const journalTimeInput = document.getElementById('journalTimeInput');
   const journalAddError = document.getElementById('journalAddError');
+  const journalStatusToggle = document.getElementById('journalStatusToggle');
+  let journalAddStatus = 'seen';
+
+  if (journalStatusToggle) {
+    journalStatusToggle.querySelectorAll('.level-mode-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        journalAddStatus = btn.dataset.status;
+        journalStatusToggle.querySelectorAll('.level-mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      });
+    });
+  }
 
   async function populateJournalDatalist() {
     const dl = document.getElementById('journalCatalogDatalist');
@@ -2541,7 +2577,10 @@ function assignLanesClient(objects) {
     journalNameInput.value = prefillName || '';
     journalDateInput.value = toDateStr(new Date());
     journalTimeInput.value = '';
-    document.getElementById('journalStatusSeen').checked = true;
+    journalAddStatus = 'seen';
+    if (journalStatusToggle) {
+      journalStatusToggle.querySelectorAll('.level-mode-btn').forEach((b) => b.classList.toggle('active', b.dataset.status === 'seen'));
+    }
     populateJournalDatalist();
     journalAddOverlay.classList.remove('hidden');
   }
@@ -2565,7 +2604,7 @@ function assignLanesClient(objects) {
         journalAddError.classList.remove('hidden');
         return;
       }
-      const status = document.getElementById('journalStatusFailed').checked ? 'failed' : 'seen';
+      const status = journalAddStatus;
       const catalogItem = (catalogList || []).find((o) => o.name.toLowerCase() === name.toLowerCase());
       const category = catalogItem ? catalogItem.category : '';
       journalAddSubmit.disabled = true;

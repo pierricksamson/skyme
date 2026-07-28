@@ -1010,12 +1010,20 @@ body.red-filter::after {
   font-weight: 600;
 }
 .cal-day:disabled { cursor: default; }
-.cal-day-dot {
+.cal-day-dots {
   position: absolute;
   bottom: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.cal-day-dot {
   width: 4px; height: 4px;
   border-radius: 50%;
   background: var(--accent);
+  flex: none;
 }
 .cal-day-dot-plan {
   background: var(--c-galaxy);
@@ -1041,13 +1049,29 @@ body.red-filter::after {
   font-size: 9px;
 }
 .cal-day-journal-dot {
-  position: absolute;
-  bottom: 5px;
-  left: 9px;
-  width: 4px; height: 4px;
-  border-radius: 50%;
   background: #4fae6c;
 }
+
+.journal-choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  cursor: pointer;
+}
+.journal-choice-btn i { font-size: 20px; }
+.journal-choice-seen { color: #4fae6c; }
+.journal-choice-seen i { color: #4fae6c; }
+.journal-choice-failed { color: #c4577f; }
+.journal-choice-failed i { color: #c4577f; }
+.journal-choice-btn:active { background: rgba(212,175,106,0.1); }
 
 /* ---------- Settings ---------- */
 .settings-card {
