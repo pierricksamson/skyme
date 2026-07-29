@@ -13,16 +13,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 </head>
 <body>
-  <div class="app">
-
-    <header id="header" class="topbar" style="position: sticky; top: 0; background-color: rgba(9, 9, 10, 0.92); z-index: 999;">
-      <div class="brand">
-        <span class="brand-mark">✦</span>
-        <span class="brand-word">Skyme</span>
-      </div>
-      <button id="refreshBtn" class="icon-btn" title="Refresh">⟳</button>
-    </header>
-
+  <div class="app hidden" id="app">
     <section id="confirmPanel" class="status-panel" style="z-index: 0;">
       <div style="width:100%; max-width:340px; display:flex; flex-direction:column; gap:16px; text-align:left; max-height: 90vh; overflow-y:auto; padding: 4px 4px 24px;">
         <div style="text-align:center;">
@@ -794,6 +785,11 @@
             <span class="side-menu-item-icon"><i class='bx bx-cog'></i></span>
             <span class="side-menu-item-label">Settings</span>
             <i class='bx bx-chevron-right side-menu-item-arrow'></i>
+          </button>
+          <button class="side-menu-item nav-btn" onclick="try { sessionStorage.setItem('skyme_skip_confirm', '1'); } catch (e) { /* ignore */ }; location.reload();">
+            <span class="side-menu-item-icon"><i class='bx bx-refresh'></i></span>
+            <span class="side-menu-item-label">Reload</span>
+            <i class='bx bx-link-external side-menu-item-arrow'></i>
           </button>
         </div>
         <div class="side-menu-footer">

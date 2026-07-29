@@ -8,7 +8,6 @@
   const mainContent = document.getElementById('mainContent');
   const bottomNav = document.getElementById('bottomNav');
   const locLine = document.getElementById('locLine');
-  const refreshBtn = document.getElementById('refreshBtn');
   const retryBtn = document.getElementById('retryBtn');
 
   const BASE_PX_PER_MIN = 2.4;
@@ -1283,7 +1282,6 @@ function renderInfoPhase(data) {
     });
   });
 
-  refreshBtn.addEventListener('click', resolveLocation);
   retryBtn.addEventListener('click', resolveLocation);
 
   wireFilterPanel({
@@ -2207,7 +2205,6 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const confirmMinAltInput = document.getElementById('confirmMinAltInput');
 
   function populateConfirmPanel() {
-    document.getElementById('header').style.display = "none";
     const noLocSaved = settingsCache.loc_mode === 'manual'
       && (settingsCache.loc_lat === null || settingsCache.loc_lat === undefined)
       && (settingsCache.loc_lon === null || settingsCache.loc_lon === undefined);
@@ -4322,7 +4319,6 @@ document.addEventListener('click', (e) => {
   // Sinon (il n'a que des entrées 'failed'), c'est un échec
   return 'failed';
 }
-  document.getElementById('header').style.display = "sticky";
   switchView('overview')
   bootstrapConfirmFlow();
   resetZoomToFit();
@@ -4331,3 +4327,7 @@ document.addEventListener('click', (e) => {
 function loadingBlockHtml(msg, abs = false) {
   return `<div class="locked-state${abs ? ' locked-state-abs' : ''}"><div class="spinner"></div><p>${msg}</p></div>`;
 }
+
+setTimeout(() => {
+  document.getElementById('app').classList.remove('hidden');
+}, "100");
