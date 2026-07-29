@@ -357,6 +357,15 @@ function refreshSharedFilterViews() {
     confirmPanel.classList.add('hidden');
     mainContent.classList.remove('hidden');
     bottomNav.classList.remove('hidden');
+    // #app est révélé ici (et non via un setTimeout indépendant en bas de
+    // fichier) pour que les mesures de layout faites juste après
+    // (computeFitZoom) portent sur un DOM réellement visible : sinon
+    // offsetHeight/getBoundingClientRect renvoient des valeurs fausses
+    // (0, ou héritées d'un état display:none), ce qui faussait le zoom
+    // "auto" et faisait apparaître le coucher de soleil très bas dans la
+    // timeline au chargement.
+    const appEl = document.getElementById('app');
+    if (appEl) appEl.classList.remove('hidden');
   }
 
   function isLocationSet() {
@@ -4315,12 +4324,21 @@ document.addEventListener('click', (e) => {
     showAppShell();
 
     // Le zoom "fit" calculé pendant le chargement (DOM encore caché) est
-    // faux : on le recalcule maintenant que mainContent/bottomNav sont
-    // réellement visibles et ont leurs vraies dimensions.
+    // faux : on le recalcule maintenant que mainContent/bottomNav/#app sont
+    // réellement visibles et ont leurs vraies dimensions. On attend une
+    // frame supplémentaire (requestAnimationFrame) pour être certain que le
+    // navigateur a bien appliqué le retrait de la classe "hidden" et calculé
+    // le nouveau layout avant de lire les dimensions (getBoundingClientRect /
+    // offsetHeight) : sans ce délai, le calcul pouvait encore tomber sur
+    // l'ancien layout (display:none) et produire un zoom "auto" trop élevé,
+    // ce qui faisait apparaître le coucher de soleil très bas dans la
+    // timeline juste après l'initialisation.
     if (currentData) {
-      renderTimeline(currentData);
-      positionNowLine(currentData);
-      positionSunLines(currentData);
+      requestAnimationFrame(() => {
+        renderTimeline(currentData);
+        positionNowLine(currentData);
+        positionSunLines(currentData);
+      });
     }
 
     renderLibraryList();
@@ -4339,12 +4357,17 @@ document.addEventListener('click', (e) => {
 }
   switchView('overview')
   bootstrapConfirmFlow();
+  resetZoomToFit();
 })();
 
 function loadingBlockHtml(msg, abs = false) {
   return `<div class="locked-state${abs ? ' locked-state-abs' : ''}"><div class="spinner"></div><p>${msg}</p></div>`;
 }
 
-setTimeout(() => {
-  document.getElementById('app').classList.remove('hidden');
-}, "100");
+// NB : #app est désormais révélé directement dans showAppShell() (voir
+// plus haut), au même moment que mainContent/bottomNav, et non plus via un
+// setTimeout(100) indépendant. Ce découplage faisait que le recalcul du
+// zoom "auto" (computeFitZoom) s'exécutait pendant que #app avait encore
+// `display: none`, donnant des mesures de layout nulles/fausses et un
+// zoom bien trop élevé : la timeline devenait beaucoup plus haute que
+// l'écran et le coucher de soleil se retrouvait très bas, hors de vue.
