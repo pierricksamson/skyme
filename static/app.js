@@ -4267,7 +4267,6 @@ document.addEventListener('click', (e) => {
       ['Chargement de la bibliothèque…', fetchCatalogListOnce],
       ['Chargement des statistiques…', fetchCatalogStatsOnce],
       ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
-      ['Chargement de l\u2019agenda…', loadAgendaFavCounts],
       ['Chargement des plans…', loadPlanDatesRange],
       ['Chargement du journal…', loadJournal],
     ];
