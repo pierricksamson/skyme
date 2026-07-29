@@ -771,7 +771,7 @@ function refreshSharedFilterViews() {
 
   function resetZoomToFit() {
     if (!currentData) return;
-    zoomMode = 'auto';
+    if (zoomMode !== 'auto') return;
     saveSettings({ zoom_mode: 'auto' }); // on ne stocke jamais la valeur calculée de l'auto
     renderTimeline(currentData); // renderTimeline recalcule zoomLevel car zoomMode === 'auto'
     positionNowLine(currentData);
@@ -794,6 +794,7 @@ function refreshSharedFilterViews() {
   });
   document.getElementById('zoomFit').addEventListener('click', (e) => {
     e.currentTarget.blur();
+    zoomMode = 'auto';
     resetZoomToFit();
   });
 
@@ -1239,6 +1240,7 @@ function renderInfoPhase(data) {
     if (name === 'timeline' && currentData) {
       renderTimeline(currentData);
       positionNowLine(currentData);
+      resetZoomToFit();
     }
     if (name === 'library') {
       initLibraryView();
@@ -4385,6 +4387,7 @@ document.addEventListener('click', (e) => {
 }
   switchView('overview')
   bootstrapConfirmFlow();
+  console.log(zoomMode)
   resetZoomToFit();
 })();
 

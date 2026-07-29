@@ -7,6 +7,8 @@ ciel (agenda, timeline), etc. Toute valeur par défaut modifiable doit vivre
 ici, pas ailleurs.
 """
 
+v ='v0.5+'
+
 # ---------- Calcul du ciel (timeline / agenda / plans) ----------
 
 # Hauteur minimale (degrés) au-dessus de l'horizon pour qu'un objet soit

@@ -517,7 +517,7 @@ def assign_lanes(objects):
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html", username=request.user["username"])
+    return render_template("index.html", username=request.user["username"], v=config.v)
 
 
 @app.route("/login", methods=["GET", "POST"])
