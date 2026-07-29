@@ -2114,11 +2114,40 @@ body.red-filter::after {
 }
 
 .info-phase {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
   margin: 0 0 16px;
   padding: 12px 14px;
   border-radius: 12px;
   background: var(--bg-elevated);
   border: 1px solid var(--hairline);
+}
+.info-phase-visual {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.info-phase-disc {
+  width: 56px;
+  height: 56px;
+  display: block;
+}
+.info-phase-disc .phase-lit {
+  fill: #f5f0e6;
+}
+.info-phase-disc .phase-dark {
+  fill: #14141a;
+}
+.info-phase-disc .phase-outline {
+  fill: none;
+  stroke: var(--hairline);
+  stroke-width: 1.5;
+}
+.info-phase-content {
+  flex: 1;
+  min-width: 0;
 }
 .info-phase-row {
   display: flex;

@@ -987,6 +987,41 @@ function refreshSharedFilterViews() {
   }
 }
 
+// Construit le path SVG de la partie éclairée d'un disque (lune/planète)
+// à partir de la fraction illuminée (0..1) et du sens (croissant/décroissant).
+// waxing=true -> partie éclairée à droite ; waxing=false -> à gauche.
+function buildPhaseDiscPath(k, waxing, cx, cy, r) {
+  k = Math.max(0, Math.min(1, k));
+  const rx = r * Math.abs(1 - 2 * k);
+  const top = `${cx},${cy - r}`;
+  const bottom = `${cx},${cy + r}`;
+  let semiSweep, ellSweep;
+  if (waxing) {
+    semiSweep = 1;
+    ellSweep = k < 0.5 ? 0 : 1;
+  } else {
+    semiSweep = 0;
+    ellSweep = k < 0.5 ? 1 : 0;
+  }
+  return `M ${top} A ${r},${r} 0 0,${semiSweep} ${bottom} A ${rx},${r} 0 0,${ellSweep} ${top} Z`;
+}
+
+function renderPhaseDisc(illuminationPct, waxing) {
+  const svg = document.getElementById('infoPhaseDisc');
+  if (!svg) return;
+  const cx = 50, cy = 50, r = 46;
+  const k = (illuminationPct || 0) / 100;
+  // Sens par défaut (croissant) si inconnu (certaines planètes n'exposent
+  // pas toujours l'info) : purement illustratif dans ce cas.
+  const isWaxing = (waxing === null || waxing === undefined) ? true : !!waxing;
+  const litPath = buildPhaseDiscPath(k, isWaxing, cx, cy, r);
+  svg.innerHTML = `
+    <circle class="phase-dark" cx="${cx}" cy="${cy}" r="${r}"></circle>
+    <path class="phase-lit" d="${litPath}"></path>
+    <circle class="phase-outline" cx="${cx}" cy="${cy}" r="${r}"></circle>
+  `;
+}
+
 function renderInfoPhase(data) {
   const wrap = document.getElementById('infoPhase');
   const illumEl = document.getElementById('infoPhaseIllum');
@@ -996,6 +1031,7 @@ function renderInfoPhase(data) {
   if (!data) { wrap.classList.add('hidden'); return; }
 
   illumEl.textContent = `${data.illumination}%`;
+  renderPhaseDisc(data.illumination, data.waxing);
 
   if (data.kind === 'moon') {
     nameEl.textContent = data.phase_name;
