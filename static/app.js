@@ -2997,11 +2997,15 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   // Formatte l'horaire d'observation d'un objet pour la nuit + les
   // paramètres du plan ouvert : créneau lever→coucher, "toujours visible",
-  // ou "Impossible de voir ce soir là" si l'objet ne dépasse pas l'altitude
-  // minimale sur toute la fenêtre. Renvoie '' tant que le calcul n'est pas
-  // encore disponible (pas de position, ou chargement en cours).
+  // "Impossible de voir ce soir là" si l'objet ne dépasse pas l'altitude
+  // minimale sur toute la fenêtre, ou un état "Chargement…" tant que le
+  // calcul des horaires (loadPlanSchedule) n'est pas encore terminé —
+  // évite d'afficher une ligne vide qui laisse croire que rien ne se
+  // passe pendant qu'on ajoute des objets au plan.
   function planScheduleLineHtml(name) {
-    if (!planScheduleLoaded) return '';
+    if (!planScheduleLoaded) {
+      return `<span class="lib-row-when lib-row-when-loading"><span class="lib-row-when-spinner"></span>Chargement des horaires…</span>`;
+    }
     const sched = planScheduleByName[name];
     if (!sched) {
       return `<span class="lib-row-when lib-row-when-impossible">Impossible de voir ce soir là</span>`;
@@ -3210,7 +3214,11 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const planSaveBtnEl = document.getElementById('planSaveBtn');
   if (planSaveBtnEl) planSaveBtnEl.addEventListener('click', savePlan);
   const planDeleteBtnEl = document.getElementById('planDeleteBtn');
-  if (planDeleteBtnEl) planDeleteBtnEl.addEventListener('click', deleteCurrentPlan);
+  if (planDeleteBtnEl) planDeleteBtnEl.addEventListener('click', () => {
+    if (window.confirm('Supprimer ce plan ? Cette action est irréversible.')) {
+      deleteCurrentPlan();
+    }
+  });
 
   async function loadPlanDatesRange() {
     try {

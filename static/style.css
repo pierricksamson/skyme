@@ -2065,3 +2065,33 @@ body.red-filter::after {
   border-radius: 5px;
   padding: 0 3px 0;
 }
+
+/* ---------- Fixes: map picker z-index + loading state du plan ---------- */
+
+/* La carte de sélection (#mapOverlay) doit toujours passer au-dessus des
+   autres bottom sheets (ex: paramètres du plan) quand elle est ouverte
+   par-dessus, sinon elle apparaissait derrière (même z-index, mais plus
+   tôt dans le DOM). */
+#mapOverlay {
+  z-index: 1200;
+}
+
+/* État "chargement des horaires" dans la liste des objets du plan, tant
+   que /api/sky n'a pas encore répondu pour la date + les paramètres du
+   plan ouvert. */
+.lib-row-when-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+.lib-row-when-spinner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.9s linear infinite;
+  flex: none;
+}
