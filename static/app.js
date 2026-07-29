@@ -4339,7 +4339,6 @@ document.addEventListener('click', (e) => {
 }
   switchView('overview')
   bootstrapConfirmFlow();
-  resetZoomToFit();
 })();
 
 function loadingBlockHtml(msg, abs = false) {
