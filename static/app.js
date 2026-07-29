@@ -2434,6 +2434,9 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   }
 
+  let catalogListInFlight = null;
+  let catalogListInFlightKey = null;
+
   async function fetchCatalogListOnce() {
     // Clé de cache : la position et l'altitude minimale influent sur le
     // lever/coucher réel de chaque objet, donc on refait la requête dès
@@ -2442,20 +2445,36 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       ? `${currentLat.toFixed(4)}|${currentLon.toFixed(4)}|${currentElev}|${getMinAlt()}`
       : 'no-location';
     if (catalogList && catalogListKey === key) return catalogList;
-    try {
-      let url = '/api/catalog/list';
-      if (isLocationSet()) {
-        url += `?lat=${currentLat}&lon=${currentLon}&elev=${currentElev}&min_alt=${getMinAlt()}`;
-      }
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const data = await res.json();
-      catalogList = data.items;
-      catalogListKey = key;
-      return catalogList;
-    } catch (e) {
-      return null;
+
+    // Une requête pour cette même clé est déjà en cours (ex : render() et
+    // l'étape "Chargement de la bibliothèque…" qui se chevauchent au
+    // démarrage) : on réutilise sa promesse plutôt que de refaire un fetch.
+    if (catalogListInFlight && catalogListInFlightKey === key) {
+      return catalogListInFlight;
     }
+
+    catalogListInFlightKey = key;
+    catalogListInFlight = (async () => {
+      try {
+        let url = '/api/catalog/list';
+        if (isLocationSet()) {
+          url += `?lat=${currentLat}&lon=${currentLon}&elev=${currentElev}&min_alt=${getMinAlt()}`;
+        }
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const data = await res.json();
+        catalogList = data.items;
+        catalogListKey = key;
+        return catalogList;
+      } catch (e) {
+        return null;
+      } finally {
+        catalogListInFlight = null;
+        catalogListInFlightKey = null;
+      }
+    })();
+
+    return catalogListInFlight;
   }
 
   function renderLibraryList() {
