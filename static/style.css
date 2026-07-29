@@ -2095,3 +2095,35 @@ body.red-filter::after {
   animation: spin 0.9s linear infinite;
   flex: none;
 }
+
+.info-phase {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+}
+.info-phase-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.info-phase-illum {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  color: var(--accent);
+}
+.info-phase-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.info-phase-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}

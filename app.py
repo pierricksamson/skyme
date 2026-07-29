@@ -16,7 +16,8 @@ iers.conf.auto_download = False  # keep the app fully offline
 
 from astropy.time import Time
 from astropy.coordinates import (
-    EarthLocation, AltAz, SkyCoord, get_body, get_sun
+    EarthLocation, AltAz, SkyCoord, get_body, get_sun,
+    get_body_barycentric, GeocentricTrueEcliptic
 )
 import astropy.units as u
 import requests
@@ -152,7 +153,7 @@ PLANET_BODY_NAME = {
     "Jupiter": "jupiter", "Saturn": "saturn",
     "Uranus": "uranus", "Neptune": "neptune",
 }
-
+SYNODIC_MONTH_DAYS = 29.530588853
 
 def moon_magnitude(t, location):
     """Rough phase-based Moon magnitude estimate."""
@@ -163,6 +164,109 @@ def moon_magnitude(t, location):
     illum = max(illum, 0.01)
     return round(-12.7 + 2.5 * np.log10(1 / illum), 2)
 
+def _heliocentric_distance_au(body_key, t):
+    pos = get_body_barycentric(body_key, t)
+    sun_pos = get_body_barycentric("sun", t)
+    return float((pos - sun_pos).norm().to(u.au).value)
+
+
+def _planet_phase_geometry(body_key, t, location):
+    """r = distance Soleil-planète (UA), delta = distance observateur-planète
+    (UA), R = distance Soleil-Terre (UA), i = angle de phase (degrés,
+    Soleil-planète-Terre). 100% hors-ligne (éphéméride intégrée Astropy)."""
+    geocentric = get_body(body_key, t, location)
+    delta = float(geocentric.distance.to(u.au).value)
+    r = _heliocentric_distance_au(body_key, t)
+    R = _heliocentric_distance_au("earth", t)
+    cos_i = (r ** 2 + delta ** 2 - R ** 2) / (2 * r * delta)
+    cos_i = min(1.0, max(-1.0, cos_i))
+    i = float(np.degrees(np.arccos(cos_i)))
+    return r, delta, R, i
+
+
+def compute_planet_magnitude(pname, body_key, t, location):
+    """Magnitude apparente approx., basée sur la phase et les distances
+    Soleil-planète-Terre (formules empiriques classiques, Meeus,
+    Astronomical Algorithms ch. 41). Toujours hors-ligne."""
+    try:
+        r, delta, _R, i = _planet_phase_geometry(body_key, t, location)
+    except Exception:
+        return PLANET_MAG.get(pname)
+
+    if pname == "Mercury":
+        v1 = -0.42 + 0.0380 * i - 0.000273 * i ** 2 + 0.000002 * i ** 3
+    elif pname == "Venus":
+        v1 = -4.40 + 0.0009 * i + 0.000239 * i ** 2 - 0.00000065 * i ** 3
+    elif pname == "Mars":
+        v1 = -1.52 + 0.016 * i
+    elif pname == "Jupiter":
+        v1 = -9.40 + 0.005 * i
+    elif pname == "Saturn":
+        # Contribution des anneaux ignorée (nécessiterait leur angle
+        # d'ouverture vu depuis la Terre) : approximation raisonnable.
+        v1 = -8.88
+    elif pname == "Uranus":
+        v1 = -7.19
+    elif pname == "Neptune":
+        v1 = -6.87
+    else:
+        v1 = 0.0
+
+    try:
+        return round(v1 + 5 * np.log10(r * delta), 2)
+    except (ValueError, ZeroDivisionError):
+        return PLANET_MAG.get(pname)
+
+
+def _moon_phase_angle_deg(t):
+    """0°=nouvelle lune, 90°=1er quartier, 180°=pleine lune, 270°=dernier
+    quartier — différence de longitude écliptique géocentrique Lune-Soleil."""
+    moon = get_body("moon", t).transform_to(GeocentricTrueEcliptic(equinox=t))
+    sun = get_sun(t).transform_to(GeocentricTrueEcliptic(equinox=t))
+    return float((moon.lon.deg - sun.lon.deg) % 360)
+
+
+_MOON_PHASE_BUCKETS = [
+    (22.5, "Nouvelle lune"), (67.5, "Premier croissant"),
+    (112.5, "Premier quartier"), (157.5, "Lune gibbeuse croissante"),
+    (202.5, "Pleine lune"), (247.5, "Lune gibbeuse décroissante"),
+    (292.5, "Dernier quartier"), (337.5, "Dernier croissant"),
+    (360.01, "Nouvelle lune"),
+]
+
+
+def moon_phase_info(t):
+    diff = _moon_phase_angle_deg(t)
+    illum = (1 - np.cos(np.radians(diff))) / 2
+    waxing = diff < 180
+    age_days = diff / 360.0 * SYNODIC_MONTH_DAYS
+    days_to_full = ((180 - diff) if diff <= 180 else (540 - diff)) / 360.0 * SYNODIC_MONTH_DAYS
+    days_to_new = (360 - diff) / 360.0 * SYNODIC_MONTH_DAYS
+    name = next(label for limit, label in _MOON_PHASE_BUCKETS if diff < limit)
+
+    return {
+        "kind": "moon",
+        "illumination": round(illum * 100, 1),
+        "phase_angle_deg": round(diff, 1),
+        "phase_name": name,
+        "waxing": bool(waxing),
+        "age_days": round(age_days, 1),
+        "days_to_full_moon": round(days_to_full, 1),
+        "days_to_new_moon": round(days_to_new, 1),
+        "synodic_month_days": round(SYNODIC_MONTH_DAYS, 2),
+    }
+
+
+def planet_phase_info(pname, body_key, t, location):
+    r, delta, R, i = _planet_phase_geometry(body_key, t, location)
+    illum = (1 + np.cos(np.radians(i))) / 2
+    return {
+        "kind": "planet",
+        "illumination": round(illum * 100, 1),
+        "phase_angle_deg": round(i, 1),
+        "distance_earth_au": round(delta, 3),
+        "distance_sun_au": round(r, 3),
+    }
 
 def find_night_window(location, now_utc, min_alt=config.DEFAULT_MIN_ALT):
     """Sample the sun's altitude across the next ~36h to find the coming
@@ -328,7 +432,7 @@ def find_rise_set_event(coord_factory, location, t_ref, min_alt=config.DEFAULT_M
 
 def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
                     t_list, frame_list, location, min_alt=config.DEFAULT_MIN_ALT, is_moon=False,
-                    is_favorite=False):
+                    is_favorite=False, is_planet=False, planet_body_key=None):
     coord = coord_factory(t_list, location)
     altaz = coord.transform_to(frame_list)
     alt_deg = altaz.alt.deg
@@ -350,6 +454,8 @@ def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
     mag = fixed_mag
     if is_moon:
         mag = moon_magnitude(t_list[peak_idx], location)
+    elif is_planet and planet_body_key:
+        mag = compute_planet_magnitude(name, planet_body_key, t_list[peak_idx], location)
 
     duration_min = (set_t - rise_t).sec / 60.0
 
@@ -524,10 +630,9 @@ def sky():
     for pname, body_key in PLANET_BODY_NAME.items():
         factory = (lambda times, loc, bk=body_key: get_body(bk, times, loc))
         obj = compute_object(factory, pname, "planet", PLANET_MAG[pname], t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt,
-                              is_favorite=(pname in favorites))
-        if obj:
-            objects.append(obj)
+                            t_list, frame_list, location, min_alt=min_alt,
+                            is_favorite=(pname in favorites),
+                            is_planet=True, planet_body_key=body_key)
 
     for name, ra, dec, mag in STARS:
         fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
@@ -650,10 +755,40 @@ def catalog_list():
             item["always_visible"] = event["always_visible"]
             item["never_visible"] = event["never_visible"]
             item["up_now"] = event["up_now"]
+            if item["category"] == "planet":
+                item["magnitude"] = compute_planet_magnitude(
+                    item["name"], PLANET_BODY_NAME[item["name"]], Time(now_utc), location)
+            elif item["category"] == "moon":
+                item["magnitude"] = moon_magnitude(Time(now_utc), location)
 
     items.sort(key=lambda o: o["name"])
     return jsonify({"items": items})
 
+@app.route("/api/phase")
+@login_required
+def phase_info():
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+
+    t = Time(datetime.now(timezone.utc))
+
+    if name == "Moon":
+        return jsonify(moon_phase_info(t))
+
+    body_key = PLANET_BODY_NAME.get(name)
+    if not body_key:
+        return jsonify({"error": "not applicable"}), 404
+
+    try:
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "lat/lon required"}), 400
+    elev = float(request.args.get("elev", 0) or 0)
+    location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
+
+    return jsonify(planet_phase_info(name, body_key, t, location))
 
 @app.route("/api/favorites", methods=["GET"])
 @login_required

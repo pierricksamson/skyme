@@ -933,6 +933,52 @@ function refreshSharedFilterViews() {
     }
   }
 
+  async function fetchPhaseInfo(o) {
+  try {
+    let url = `/api/phase?name=${encodeURIComponent(o.name)}`;
+    if (o.category === 'planet') {
+      if (currentLat === null || currentLon === null) return null;
+      url += `&lat=${currentLat}&lon=${currentLon}&elev=${currentElev}`;
+    }
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderInfoPhase(data) {
+  const wrap = document.getElementById('infoPhase');
+  const illumEl = document.getElementById('infoPhaseIllum');
+  const nameEl = document.getElementById('infoPhaseName');
+  const detailsEl = document.getElementById('infoPhaseDetails');
+  if (!wrap) return;
+  if (!data) { wrap.classList.add('hidden'); return; }
+
+  illumEl.textContent = `${data.illumination}%`;
+
+  if (data.kind === 'moon') {
+    nameEl.textContent = data.phase_name;
+    const trend = data.waxing ? 'Croissante' : 'Décroissante';
+    detailsEl.innerHTML = `
+      <span>${trend}</span>
+      <span>Âge : ${data.age_days} j</span>
+      <span>Pleine lune dans ${data.days_to_full_moon} j</span>
+      <span>Nouvelle lune dans ${data.days_to_new_moon} j</span>
+      <span>Cycle synodique : ${data.synodic_month_days} j</span>
+    `;
+  } else {
+    nameEl.textContent = 'Phase';
+    detailsEl.innerHTML = `
+      <span>Angle de phase : ${data.phase_angle_deg}°</span>
+      <span>Distance Terre : ${data.distance_earth_au} UA</span>
+      <span>Distance Soleil : ${data.distance_sun_au} UA</span>
+    `;
+  }
+  wrap.classList.remove('hidden');
+}
+
 
   function renderInfoWiki(data, objectName) {
     const wrap = document.getElementById('infoWiki');
@@ -1019,6 +1065,15 @@ function refreshSharedFilterViews() {
     fetchObjectInfo(wikiRequestName).then((data) => {
       if (infoObj && infoObj.name === wikiRequestName) renderInfoWiki(data, wikiRequestName);
     });
+
+    const infoPhaseEl = document.getElementById('infoPhase');
+    if (infoPhaseEl) infoPhaseEl.classList.add('hidden');
+    if (o.category === 'moon' || o.category === 'planet') {
+      const phaseRequestName = o.name;
+      fetchPhaseInfo(o).then((data) => {
+        if (infoObj && infoObj.name === phaseRequestName) renderInfoPhase(data);
+      });
+    }
 
     const color = o.color || CATEGORY_COLOR_VAR[o.category] || 'var(--text-muted)';
     document.getElementById('infoDot').style.background = color;
