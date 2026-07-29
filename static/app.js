@@ -4338,8 +4338,36 @@ document.addEventListener('click', (e) => {
         renderTimeline(currentData);
         positionNowLine(currentData);
         positionSunLines(currentData);
+        requestAnimationFrame(() => {
+          renderTimeline(currentData);
+          positionNowLine(currentData);
+          positionSunLines(currentData);
+        });
       });
+
+      // Le double requestAnimationFrame ne suffit pas : au premier chargement,
+      // les polices web (Cormorant Garamond / Inter / IBM Plex Mono) ne sont pas
+      // forcément encore appliquées, ce qui change la hauteur de la topbar et
+      // du header de date (tl-date) une fois qu'elles finissent de charger.
+      // computeFitZoom() (basé sur tlWrap.getBoundingClientRect().top) avait
+      // donc calculé son "fit" sur un layout encore provisoire, plus haut que
+      // le layout final : une fois les polices appliquées, tlWrap descendait
+      // légèrement, mais le zoom déjà calculé restait figé jusqu'au prochain
+      // clic manuel sur "fit" — d'où la ligne sunrise/sunset affichée trop
+      // bas tant qu'on ne relance pas le calcul soi-même. On attend donc que
+      // les polices soient prêtes (document.fonts.ready) puis on recalcule
+      // une dernière fois.
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => {
+          if (!currentData || zoomMode !== 'auto') return;
+          renderTimeline(currentData);
+          positionNowLine(currentData);
+          positionSunLines(currentData);
+        });
+      }
     }
+    
+    
 
     renderLibraryList();
     renderOverviewFavorites();
