@@ -4220,7 +4220,7 @@ document.addEventListener('click', (e) => {
   // (retryBtn) appellent resolveLocation() directement et ne repassent pas
   // par cet écran.
   async function bootstrapConfirmFlow() {
-    statusPanel.classList.remove('hidden');
+    //statusPanel.classList.remove('hidden');
     setStatus('Chargement des paramètres…');
     setProgress(10);
     try { await loadSettingsFromServer(); } catch (e) { /* valeurs par défaut conservées */ }
