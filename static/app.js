@@ -331,12 +331,43 @@ function refreshSharedFilterViews() {
 
   function setStatus(msg) { statusText.textContent = msg; }
 
-  const progressBarFill = document.getElementById('progressBarFill');
-  const progressPct = document.getElementById('progressPct');
-  function setProgress(pct) {
-    pct = Math.max(0, Math.min(100, Math.round(pct)));
-    if (progressBarFill) progressBarFill.style.width = pct + '%';
-    if (progressPct) progressPct.textContent = pct + '%';
+  // Écran de chargement : au lieu d'une barre de progression en %, on
+  // affiche une série de points, un par étape (paramètres, position, ciel,
+  // bibliothèque, statistiques, agenda, plans, journal), plus un dernier
+  // point pour l'étape finale "tout est prêt" affichée brièvement avant
+  // l'ouverture de l'app.
+  const LOAD_STEPS = [
+    'Paramètres',
+    'Position',
+    'Ciel',
+    'Bibliothèque',
+    'Statistiques',
+    'Agenda',
+    'Plans',
+    'Journal',
+    'Prêt',
+  ];
+  const stepDotsEl = document.getElementById('stepDots');
+
+  function renderStepDots() {
+    if (!stepDotsEl || stepDotsEl.childElementCount === LOAD_STEPS.length) return;
+    stepDotsEl.innerHTML = LOAD_STEPS
+      .map((label, i) => `<div class="step-dot" data-step="${i}" title="${label}"></div>`)
+      .join('');
+  }
+
+  // Marque les points précédant `index` comme "faits", le point `index`
+  // comme actif (ou comme "succès" si opts.success est vrai, pour l'étape
+  // finale).
+  function setStep(index, opts = {}) {
+    if (!stepDotsEl) return;
+    renderStepDots();
+    const dots = stepDotsEl.querySelectorAll('.step-dot');
+    dots.forEach((dot, i) => {
+      dot.classList.remove('active', 'done', 'success');
+      if (i < index) dot.classList.add('done');
+      else if (i === index) dot.classList.add(opts.success ? 'success' : 'active');
+    });
   }
 
   function showError(msg) {
@@ -4248,8 +4279,9 @@ document.addEventListener('click', (e) => {
   // par cet écran.
   async function bootstrapConfirmFlow() {
     //statusPanel.classList.remove('hidden');
+    renderStepDots();
     setStatus('Chargement des paramètres…');
-    setProgress(10);
+    setStep(0);
     try { await loadSettingsFromServer(); } catch (e) { /* valeurs par défaut conservées */ }
     try { await loadFavorites(); } catch (e) { /* best effort */ }
 
@@ -4301,12 +4333,13 @@ document.addEventListener('click', (e) => {
       ['Chargement du journal…', loadJournal],
     ];
 
-    setProgress(0);
+    // Le point 0 (Paramètres) a déjà été marqué "fait" par bootstrapConfirmFlow ;
+    // les étapes de ce tableau occupent donc les points 1 à steps.length.
     for (let i = 0; i < steps.length; i++) {
       const [label, fn] = steps[i];
       setStatus(label);
+      setStep(i + 1);
       try { await fn(); } catch (e) { /* on continue : app offline-friendly */ }
-      setProgress(((i + 1) / steps.length) * 100);
     }
 
     loadPreferences();
@@ -4321,6 +4354,16 @@ document.addEventListener('click', (e) => {
     } else {
       renderNoLocation('Aucune position définie. Choisis-la sur la carte ou saisis-la dans Paramètres.');
     }
+
+    // Dernière étape : un point supplémentaire "succès" s'allume et un
+    // message confirme que tout est prêt, affiché 2 secondes avant
+    // d'ouvrir l'app (pas de nouvelle surprise ensuite : initialLoadDone
+    // n'est mis à true qu'après ce délai).
+    setStep(LOAD_STEPS.length - 1, { success: true });
+    setStatus('Tout est prêt !');
+    if (statusPanel) statusPanel.classList.add('status-panel-success');
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (statusPanel) statusPanel.classList.remove('status-panel-success');
 
     initialLoadDone = true;
     showAppShell();

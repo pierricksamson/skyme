@@ -94,12 +94,9 @@
     </section>
 
     <section id="statusPanel" class="status-panel hidden">
-      <div class="spinner"></div>
+      <div id="statusSpinner" class="spinner"></div>
       <p id="statusText">Chargement…</p>
-      <div class="progress-track">
-        <div id="progressBarFill" class="progress-fill" style="width:0%;"></div>
-      </div>
-      <span id="progressPct" class="progress-pct">0%</span>
+      <div id="stepDots" class="step-dots"></div>
       <div class="info-sun-warning" style="max-width: 250px; margin: 10px 0; background-color: rgb(0, 13, 0); border: rgb(0, 195, 0) 1px dashed;">
           <i class='bx bxs-info-circle' style="color:rgb(0, 125, 0)"></i>
           <span style="color:rgb(0, 125, 0)">Précision : ± 1 min / ± 0,1 °</span>
@@ -786,7 +783,7 @@
             <span class="side-menu-item-label">Settings</span>
             <i class='bx bx-chevron-right side-menu-item-arrow'></i>
           </button>
-          <button class="side-menu-item nav-btn" onclick="try { sessionStorage.setItem('skyme_skip_confirm', '1'); } catch (e) { /* ignore */ }; location.reload();">
+          <button class="side-menu-item nav-btn" onclick="location.reload();">
             <span class="side-menu-item-icon"><i class='bx bx-refresh'></i></span>
             <span class="side-menu-item-label">Reload</span>
             <i class='bx bx-link-external side-menu-item-arrow'></i>

@@ -227,26 +227,43 @@ body.red-filter::after {
   letter-spacing: 0.03em;
 }
 
-.progress-track {
-  width: 220px;
-  max-width: 70vw;
-  height: 6px;
-  border-radius: 999px;
+.step-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 80vw;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: var(--border);
-  overflow: hidden;
+  transition: background-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
 }
-.progress-fill {
-  height: 100%;
-  width: 0%;
+.step-dot.done {
   background: var(--accent);
-  border-radius: 999px;
-  transition: width 0.25s ease;
+  opacity: 0.55;
 }
-.progress-pct {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--accent);
-  letter-spacing: 0.03em;
+.step-dot.active {
+  background: var(--accent);
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent);
+  animation: step-dot-pulse 1.1s ease-in-out infinite;
+}
+.step-dot.success {
+  background: var(--accent);
+  transform: scale(1.5);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: none;
+}
+@keyframes step-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.status-panel.status-panel-success .spinner {
+  display: none;
 }
 
 /* ---------- Settings: barre "Enregistrer et relancer" ---------- */
