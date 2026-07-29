@@ -395,8 +395,7 @@ function refreshSharedFilterViews() {
     // (0, ou héritées d'un état display:none), ce qui faussait le zoom
     // "auto" et faisait apparaître le coucher de soleil très bas dans la
     // timeline au chargement.
-    const appEl = document.getElementById('app');
-    if (appEl) appEl.classList.remove('hidden');
+    
   }
 
   function isLocationSet() {
@@ -2208,7 +2207,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       confirmLocLatInput.value = lat.toFixed(4);
       confirmLocLonInput.value = lng.toFixed(4);
       confirmLocAutoToggle.checked = false;
-      confirmLocSkipToggle.checked = false;
+      confirmSkyEnableToggle.checked = true;
+      updateConfirmSkyEnableUI();
       confirmLocAutoRow.classList.remove('hidden');
       confirmLocManualBlock.classList.remove('hidden');
     } else if (mapPickerTarget === 'plan') {
@@ -2233,7 +2233,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const confirmStartBtn = document.getElementById('confirmStartBtn');
   const confirmLocAutoToggle = document.getElementById('confirmLocAutoToggle');
   const confirmLocAutoRow = document.getElementById('confirmLocAutoRow');
-  const confirmLocSkipToggle = document.getElementById('confirmLocSkipToggle');
+  const confirmSkyEnableToggle = document.getElementById('confirmSkyEnableToggle');
+  const confirmParamsWrapper = document.getElementById('confirmParamsWrapper');
   const confirmLocManualBlock = document.getElementById('confirmLocManualBlock');
   const confirmLocMapBtn = document.getElementById('confirmLocMapBtn');
   const confirmLocLatInput = document.getElementById('confirmLocLatInput');
@@ -2250,12 +2251,12 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const noLocSaved = settingsCache.loc_mode === 'manual'
       && (settingsCache.loc_lat === null || settingsCache.loc_lat === undefined)
       && (settingsCache.loc_lon === null || settingsCache.loc_lon === undefined);
-    confirmLocSkipToggle.checked = noLocSaved;
+    confirmSkyEnableToggle.checked = !noLocSaved;
 
     const auto = settingsCache.loc_mode !== 'manual';
     confirmLocAutoToggle.checked = auto;
     confirmLocManualBlock.classList.toggle('hidden', auto);
-    updateConfirmLocSkipUI();
+    updateConfirmSkyEnableUI();
 
     if (settingsCache.loc_lat !== null && settingsCache.loc_lat !== undefined) {
       confirmLocLatInput.value = settingsCache.loc_lat;
@@ -2286,19 +2287,21 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     confirmFixedEndInput.disabled = !fixed;
   }
 
-  // Quand "Ne pas définir de position" est coché, on masque à la fois le
-  // switch GPS et le bloc manuel : aucune position ne sera envoyée, et
-  // aucune validation de latitude/longitude n'est requise pour continuer.
-  function updateConfirmLocSkipUI() {
-    const skip = confirmLocSkipToggle.checked;
-    confirmLocAutoRow.classList.toggle('hidden', skip);
-    confirmLocManualBlock.classList.toggle('hidden', skip || confirmLocAutoToggle.checked);
+  // Quand "Activer le calcul du ciel" est désactivé, on masque tous les
+  // paramètres (localisation, plage horaire, altitude minimale) : aucune
+  // position ne sera envoyée, et aucune validation de latitude/longitude
+  // n'est requise pour continuer.
+  function updateConfirmSkyEnableUI() {
+    const enabled = confirmSkyEnableToggle.checked;
+    confirmParamsWrapper.classList.toggle('hidden', !enabled);
+    if (enabled) {
+      confirmLocManualBlock.classList.toggle('hidden', confirmLocAutoToggle.checked);
+    }
   }
 
-  confirmLocSkipToggle.addEventListener('change', updateConfirmLocSkipUI);
+  confirmSkyEnableToggle.addEventListener('change', updateConfirmSkyEnableUI);
   confirmLocAutoToggle.addEventListener('change', () => {
-    if (confirmLocAutoToggle.checked) confirmLocSkipToggle.checked = false;
-    confirmLocManualBlock.classList.toggle('hidden', confirmLocAutoToggle.checked || confirmLocSkipToggle.checked);
+    confirmLocManualBlock.classList.toggle('hidden', confirmLocAutoToggle.checked);
   });
   confirmModeFixed.addEventListener('change', onConfirmModeChange);
   confirmModeMargin.addEventListener('change', onConfirmModeChange);
@@ -2314,7 +2317,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   confirmStartBtn.addEventListener('click', async () => {
     hideConfirmError();
-    const skip = confirmLocSkipToggle.checked;
+    const skip = !confirmSkyEnableToggle.checked;
     const auto = !skip && confirmLocAutoToggle.checked;
 
     let margin = parseInt(confirmMarginInput.value, 10);
