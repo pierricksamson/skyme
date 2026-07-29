@@ -260,12 +260,23 @@ def moon_phase_info(t):
 def planet_phase_info(pname, body_key, t, location):
     r, delta, R, i = _planet_phase_geometry(body_key, t, location)
     illum = (1 + np.cos(np.radians(i))) / 2
+
+    # Tendance croissante/décroissante : on compare l'illumination à J+1.
+    # Plus l'angle de phase i diminue, plus l'illumination augmente.
+    try:
+        _r2, delta2, _R2, i2 = _planet_phase_geometry(body_key, t + 1 * u.day, location)
+        illum2 = (1 + np.cos(np.radians(i2))) / 2
+        waxing = bool(illum2 > illum)
+    except Exception:
+        waxing = None
+
     return {
         "kind": "planet",
         "illumination": round(illum * 100, 1),
         "phase_angle_deg": round(i, 1),
         "distance_earth_au": round(delta, 3),
         "distance_sun_au": round(r, 3),
+        "waxing": waxing,
     }
 
 def find_night_window(location, now_utc, min_alt=config.DEFAULT_MIN_ALT):
@@ -633,6 +644,9 @@ def sky():
                             t_list, frame_list, location, min_alt=min_alt,
                             is_favorite=(pname in favorites),
                             is_planet=True, planet_body_key=body_key)
+
+        if obj: 
+            objects.append(obj)
 
     for name, ra, dec, mag in STARS:
         fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")

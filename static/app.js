@@ -970,7 +970,11 @@ function renderInfoPhase(data) {
     `;
   } else {
     nameEl.textContent = 'Phase';
+    const trendHtml = (data.waxing === null || data.waxing === undefined)
+      ? ''
+      : `<span>${data.waxing ? 'Croissante' : 'Décroissante'}</span>`;
     detailsEl.innerHTML = `
+      ${trendHtml}
       <span>Angle de phase : ${data.phase_angle_deg}°</span>
       <span>Distance Terre : ${data.distance_earth_au} UA</span>
       <span>Distance Soleil : ${data.distance_sun_au} UA</span>
@@ -2237,7 +2241,6 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   }
 
   function onConfirmModeChange() {
-    document.getElementById('header').style.display = "sticky";
     const fixed = confirmModeFixed.checked;
     confirmMarginInput.disabled = fixed;
     confirmFixedStartInput.disabled = !fixed;
@@ -4319,6 +4322,7 @@ document.addEventListener('click', (e) => {
   // Sinon (il n'a que des entrées 'failed'), c'est un échec
   return 'failed';
 }
+  document.getElementById('header').style.display = "sticky";
   switchView('overview')
   bootstrapConfirmFlow();
   resetZoomToFit();
