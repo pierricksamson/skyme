@@ -12,7 +12,7 @@ import numpy as np
 warnings.filterwarnings("ignore", category=UserWarning, module="astropy")
 
 from astropy.utils import iers
-iers.conf.auto_download = False  # keep the app fully offline
+iers.conf.auto_download = True
 
 from astropy.time import Time
 from astropy.coordinates import (
