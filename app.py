@@ -5,7 +5,7 @@ import warnings
 from functools import wraps
 from threading import Lock
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
 from datetime import datetime, timezone, timedelta
 import numpy as np
 
@@ -1112,6 +1112,9 @@ def journal_delete(entry_id):
     ok = delete_journal_entry(request.user["id"], entry_id)
     return jsonify({"deleted": ok})
 
+@app.route("/logo")
+def logo():
+    return send_from_directory("app", "ico_bgless.png")
 
 @app.route("/api/catalog/stats")
 @login_required
