@@ -514,9 +514,20 @@ function refreshSharedFilterViews() {
     });
   }
 
-  function buildSkyUrl(lat, lon, elev, dateStr) {
-    const mode = getObsMode();
-    const margin = getObsMargin();
+  function buildSkyUrl(lat, lon, elev, dateStr, settingsOverride) {
+    const mode = settingsOverride
+      ? (settingsOverride.pref_mode === 'fixed' ? 'fixed' : 'margin')
+      : getObsMode();
+    const margin = settingsOverride
+      ? ((settingsOverride.pref_margin !== null && settingsOverride.pref_margin !== undefined)
+          ? parseInt(settingsOverride.pref_margin, 10) : 30)
+      : getObsMargin();
+    const fixedStartStr = settingsOverride ? (settingsOverride.pref_fixed_start || '20:00') : getFixedStart();
+    const fixedEndStr = settingsOverride ? (settingsOverride.pref_fixed_end || '06:00') : getFixedEnd();
+    const minAlt = settingsOverride
+      ? ((settingsOverride.pref_min_alt !== null && settingsOverride.pref_min_alt !== undefined)
+          ? parseFloat(settingsOverride.pref_min_alt) : 10)
+      : getMinAlt();
 
     // Construction des dates exactes dans le fuseau local si on est en mode 'fixed'
     let dateToUse = new Date();
@@ -526,11 +537,11 @@ function refreshSharedFilterViews() {
     }
 
     let startFixed = new Date(dateToUse);
-    const startStr = getFixedStart().split(':');
+    const startStr = fixedStartStr.split(':');
     startFixed.setHours(parseInt(startStr[0], 10), parseInt(startStr[1], 10), 0, 0);
 
     let endFixed = new Date(dateToUse);
-    const endStr = getFixedEnd().split(':');
+    const endStr = fixedEndStr.split(':');
     endFixed.setHours(parseInt(endStr[0], 10), parseInt(endStr[1], 10), 0, 0);
 
     // Si l'heure de fin est inférieure ou égale à l'heure de début (ex: 20h -> 6h),
@@ -538,8 +549,6 @@ function refreshSharedFilterViews() {
     if (endFixed <= startFixed) {
       endFixed.setDate(endFixed.getDate() + 1);
     }
-
-    const minAlt = getMinAlt();
 
     let url = `/api/sky?lat=${lat}&lon=${lon}&elev=${elev}&mode=${mode}&margin=${margin}&min_alt=${minAlt}`; // NOUVEAU (ajout de &min_alt)
     url += `&fixed_start=${startFixed.toISOString()}&fixed_end=${endFixed.toISOString()}`;
@@ -1173,12 +1182,8 @@ function refreshSharedFilterViews() {
     } else if (name === 'journal') {
       renderJournalList();
     }  else if (name === 'plan') {
-      if (!planInitialized) {
-        planInitialized = true;
-        loadPlan(planCurrentDate);
-      } else {
-        renderPlanCatalogList();
-      }
+      planInitialized = true;
+      showPlanListView();
     } 
     if (name !== 'tools') {
       stopActiveTool();
@@ -1365,7 +1370,7 @@ function refreshSharedFilterViews() {
     planBtn.classList.toggle('hidden', !hasPlan);
     planBtn.onclick = () => {
       switchView('plan');
-      loadPlan(dateStr);
+      showPlanEditorView(dateStr);
     };
     }
     listEl.innerHTML = loadingBlockHtml('Chargement…');
@@ -2067,8 +2072,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   function openMapPicker(target = 'settings') {
     mapPickerTarget = target;
     mapOverlay.classList.remove('hidden');
-    const latInput = target === 'confirm' ? confirmLocLatInput : locLatInput;
-    const lonInput = target === 'confirm' ? confirmLocLonInput : locLonInput;
+    const latInput = target === 'confirm' ? confirmLocLatInput : (target === 'plan' ? planParamsLocLatInput : locLatInput);
+    const lonInput = target === 'confirm' ? confirmLocLonInput : (target === 'plan' ? planParamsLocLonInput : locLonInput);
     const fallbackLat = parseFloat(latInput.value) || currentLat || 48.8566;
     const fallbackLon = parseFloat(lonInput.value) || currentLon || 2.3522;
 
@@ -2107,6 +2112,11 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       confirmLocSkipToggle.checked = false;
       confirmLocAutoRow.classList.remove('hidden');
       confirmLocManualBlock.classList.remove('hidden');
+    } else if (mapPickerTarget === 'plan') {
+      if (planParamsLocLatInput) planParamsLocLatInput.value = lat.toFixed(4);
+      if (planParamsLocLonInput) planParamsLocLonInput.value = lng.toFixed(4);
+      if (planParamsLocAutoToggle) planParamsLocAutoToggle.checked = false;
+      if (planParamsLocManualBlock) planParamsLocManualBlock.classList.remove('hidden');
     } else {
       locLatInput.value = lat.toFixed(4);
       locLonInput.value = lng.toFixed(4);
@@ -2602,7 +2612,19 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const overviewFavListEl = document.getElementById('overviewFavList');
   if (overviewFavListEl) overviewFavListEl.addEventListener('click', handleCatalogRowClick);
 
-  // ---------- Prévoir (planifier une soirée : sélection d'objets + note, par jour) ----------
+  // ---------- Prévoir (planifier une soirée : sélection d'objets + note +
+  // paramètres [lieu, plage horaire, altitude min] par jour) ----------
+  const PLAN_SETTINGS_KEYS = [
+    'loc_mode', 'loc_lat', 'loc_lon', 'loc_elev',
+    'pref_mode', 'pref_margin', 'pref_fixed_start', 'pref_fixed_end', 'pref_min_alt',
+  ];
+
+  function extractPlanSettings(source) {
+    const out = {};
+    PLAN_SETTINGS_KEYS.forEach((k) => { out[k] = source ? source[k] : undefined; });
+    return out;
+  }
+
   let planCurrentDate = toDateStr(today0);
   let planSelectedNames = new Set();
   let planExists = false;
@@ -2610,8 +2632,259 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   let planCatalogSearch = '';
   let planDatesWithPlan = {}; // { 'YYYY-MM-DD': nombre d'objets prévus }
   let planInitialized = false;
+  let planListData = []; // dernière liste chargée depuis /api/plans
+  let planCurrentSettings = null; // paramètres (lieu/horaire/alt min) du plan ouvert dans l'éditeur
+  let planParamsMode = 'edit'; // 'create' (nouveau plan) ou 'edit' (plan déjà ouvert)
 
   function planDateInputEl() { return document.getElementById('planDateInput'); }
+
+  // ---------- Liste des soirées prévues ----------
+
+  function showPlanListView() {
+    const listView = document.getElementById('planListView');
+    const mainView = document.getElementById('planMainView');
+    if (listView) listView.classList.remove('hidden');
+    if (mainView) mainView.classList.add('hidden');
+    loadPlanList();
+  }
+
+  function showPlanEditorView(dateStr) {
+    const listView = document.getElementById('planListView');
+    const mainView = document.getElementById('planMainView');
+    if (listView) listView.classList.add('hidden');
+    if (mainView) mainView.classList.remove('hidden');
+    loadPlan(dateStr);
+  }
+
+  function planLocationSummary(s) {
+    if (s && s.loc_mode === 'manual' && s.loc_lat !== null && s.loc_lat !== undefined
+        && s.loc_lon !== null && s.loc_lon !== undefined) {
+      return `${parseFloat(s.loc_lat).toFixed(2)}°, ${parseFloat(s.loc_lon).toFixed(2)}°`;
+    }
+    return 'Lieu par défaut';
+  }
+
+  function planTimeRangeSummary(s) {
+    if (s && s.pref_mode === 'fixed') {
+      return `${s.pref_fixed_start || '20:00'} – ${s.pref_fixed_end || '06:00'}`;
+    }
+    const margin = (s && s.pref_margin !== null && s.pref_margin !== undefined) ? s.pref_margin : 30;
+    return `Marge ${margin} min`;
+  }
+
+  async function loadPlanList() {
+    const listEl = document.getElementById('planList');
+    const emptyEl = document.getElementById('planListEmpty');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="lib-empty">Chargement…</div>';
+    if (emptyEl) emptyEl.classList.add('hidden');
+    try {
+      const res = await fetch('/api/plans');
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      planListData = data.plans || [];
+    } catch (e) {
+      planListData = [];
+    }
+    renderPlanList();
+  }
+
+  function renderPlanList() {
+    const listEl = document.getElementById('planList');
+    const emptyEl = document.getElementById('planListEmpty');
+    if (!listEl) return;
+
+    if (planListData.length === 0) {
+      listEl.innerHTML = '';
+      if (emptyEl) emptyEl.classList.remove('hidden');
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add('hidden');
+
+    const sorted = [...planListData].sort((a, b) => a.date.localeCompare(b.date));
+    listEl.innerHTML = sorted.map((p) => {
+      const d = new Date(`${p.date}T00:00:00`);
+      const label = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+      const count = (p.objects || []).length;
+      const countLabel = `${count} objet${count > 1 ? 's' : ''} prévu${count > 1 ? 's' : ''}`;
+      return `
+        <div class="lib-row lib-row-clickable" data-date="${p.date}">
+          <span class="lib-row-main">
+            <span class="lib-row-name">${label}</span>
+            <span class="lib-row-meta">${countLabel} · ${planLocationSummary(p)} · ${planTimeRangeSummary(p)}</span>
+          </span>
+          <i class='bx bx-chevron-right' style="font-size:22px; color:var(--text-muted); flex:none;"></i>
+        </div>
+      `;
+    }).join('');
+
+    listEl.querySelectorAll('.lib-row-clickable').forEach((row) => {
+      row.addEventListener('click', () => showPlanEditorView(row.dataset.date));
+    });
+  }
+
+  const planCreateBtnEl = document.getElementById('planCreateBtn');
+  if (planCreateBtnEl) planCreateBtnEl.addEventListener('click', () => openPlanParams('create'));
+  const planBackBtnEl = document.getElementById('planBackBtn');
+  if (planBackBtnEl) planBackBtnEl.addEventListener('click', showPlanListView);
+  const planParamsBtnEl = document.getElementById('planParamsBtn');
+  if (planParamsBtnEl) planParamsBtnEl.addEventListener('click', () => openPlanParams('edit'));
+
+  // ---------- Popup "Paramètres du plan" (lieu, plage horaire, altitude min) ----------
+  const planParamsOverlay = document.getElementById('planParamsOverlay');
+  const planParamsClose = document.getElementById('planParamsClose');
+  const planParamsDateLabel = document.getElementById('planParamsDateLabel');
+  const planParamsDateRow = document.getElementById('planParamsDateRow');
+  const planParamsDateInput = document.getElementById('planParamsDateInput');
+  const planParamsLocAutoToggle = document.getElementById('planParamsLocAutoToggle');
+  const planParamsLocManualBlock = document.getElementById('planParamsLocManualBlock');
+  const planParamsLocMapBtn = document.getElementById('planParamsLocMapBtn');
+  const planParamsLocLatInput = document.getElementById('planParamsLocLatInput');
+  const planParamsLocLonInput = document.getElementById('planParamsLocLonInput');
+  const planParamsLocElevInput = document.getElementById('planParamsLocElevInput');
+  const planParamsModeMargin = document.getElementById('planParamsModeMargin');
+  const planParamsModeFixed = document.getElementById('planParamsModeFixed');
+  const planParamsMarginInput = document.getElementById('planParamsMarginInput');
+  const planParamsFixedStartInput = document.getElementById('planParamsFixedStartInput');
+  const planParamsFixedEndInput = document.getElementById('planParamsFixedEndInput');
+  const planParamsMinAltInput = document.getElementById('planParamsMinAltInput');
+  const planParamsError = document.getElementById('planParamsError');
+  const planParamsSaveBtn = document.getElementById('planParamsSaveBtn');
+
+  function fillPlanParamsForm(settings) {
+    const s = settings || {};
+    const manual = s.loc_mode === 'manual';
+    if (planParamsLocAutoToggle) planParamsLocAutoToggle.checked = !manual;
+    if (planParamsLocManualBlock) planParamsLocManualBlock.classList.toggle('hidden', !manual);
+    if (planParamsLocLatInput) {
+      planParamsLocLatInput.value = (s.loc_lat !== null && s.loc_lat !== undefined)
+        ? s.loc_lat : (currentLat !== null ? currentLat.toFixed(4) : '');
+    }
+    if (planParamsLocLonInput) {
+      planParamsLocLonInput.value = (s.loc_lon !== null && s.loc_lon !== undefined)
+        ? s.loc_lon : (currentLon !== null ? currentLon.toFixed(4) : '');
+    }
+    if (planParamsLocElevInput) {
+      planParamsLocElevInput.value = (s.loc_elev !== null && s.loc_elev !== undefined) ? s.loc_elev : 0;
+    }
+
+    const mode = s.pref_mode === 'fixed' ? 'fixed' : 'margin';
+    if (planParamsModeMargin) planParamsModeMargin.checked = mode === 'margin';
+    if (planParamsModeFixed) planParamsModeFixed.checked = mode === 'fixed';
+    if (planParamsMarginInput) {
+      planParamsMarginInput.value = (s.pref_margin !== null && s.pref_margin !== undefined) ? s.pref_margin : 30;
+    }
+    if (planParamsFixedStartInput) planParamsFixedStartInput.value = s.pref_fixed_start || '20:00';
+    if (planParamsFixedEndInput) planParamsFixedEndInput.value = s.pref_fixed_end || '06:00';
+    if (planParamsMinAltInput) {
+      planParamsMinAltInput.value = (s.pref_min_alt !== null && s.pref_min_alt !== undefined) ? s.pref_min_alt : 10;
+    }
+  }
+
+  function openPlanParams(mode, dateStr) {
+    if (!planParamsOverlay) return;
+    planParamsMode = mode;
+    if (planParamsError) { planParamsError.classList.add('hidden'); planParamsError.textContent = ''; }
+
+    if (mode === 'create') {
+      if (planParamsDateRow) planParamsDateRow.classList.remove('hidden');
+      if (planParamsDateLabel) planParamsDateLabel.classList.add('hidden');
+      if (planParamsDateInput) planParamsDateInput.value = dateStr || toDateStr(today0);
+      // Les options reprennent par défaut les réglages généraux de
+      // l'utilisateur ("toujours ceux que j'ai"), personnalisables ensuite.
+      fillPlanParamsForm(settingsCache);
+    } else {
+      if (planParamsDateRow) planParamsDateRow.classList.add('hidden');
+      if (planParamsDateLabel) {
+        planParamsDateLabel.classList.remove('hidden');
+        const d = new Date(`${planCurrentDate}T00:00:00`);
+        planParamsDateLabel.textContent = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+      }
+      fillPlanParamsForm(planCurrentSettings || settingsCache);
+    }
+    planParamsOverlay.classList.remove('hidden');
+  }
+
+  function closePlanParams() {
+    if (planParamsOverlay) planParamsOverlay.classList.add('hidden');
+  }
+
+  if (planParamsClose) planParamsClose.addEventListener('click', closePlanParams);
+  if (planParamsOverlay) {
+    planParamsOverlay.addEventListener('click', (e) => {
+      if (e.target.id === 'planParamsOverlay') closePlanParams();
+    });
+  }
+  if (planParamsLocAutoToggle) {
+    planParamsLocAutoToggle.addEventListener('change', () => {
+      if (planParamsLocManualBlock) {
+        planParamsLocManualBlock.classList.toggle('hidden', planParamsLocAutoToggle.checked);
+      }
+    });
+  }
+  if (planParamsLocMapBtn) {
+    planParamsLocMapBtn.addEventListener('click', () => openMapPicker('plan'));
+  }
+
+  function readPlanParamsForm() {
+    const manual = planParamsLocAutoToggle ? !planParamsLocAutoToggle.checked : false;
+    const mode = (planParamsModeFixed && planParamsModeFixed.checked) ? 'fixed' : 'margin';
+    return {
+      loc_mode: manual ? 'manual' : 'auto',
+      loc_lat: manual ? (parseFloat(planParamsLocLatInput.value) || 0) : null,
+      loc_lon: manual ? (parseFloat(planParamsLocLonInput.value) || 0) : null,
+      loc_elev: manual ? (parseFloat(planParamsLocElevInput.value) || 0) : 0,
+      pref_mode: mode,
+      pref_margin: parseInt(planParamsMarginInput.value, 10) || 30,
+      pref_fixed_start: planParamsFixedStartInput.value || '20:00',
+      pref_fixed_end: planParamsFixedEndInput.value || '06:00',
+      pref_min_alt: parseFloat(planParamsMinAltInput.value),
+    };
+  }
+
+  async function savePlanParams() {
+    const settings = readPlanParamsForm();
+    const dateStr = planParamsMode === 'create'
+      ? ((planParamsDateInput && planParamsDateInput.value) || toDateStr(today0))
+      : planCurrentDate;
+    if (!dateStr) return;
+
+    if (planParamsSaveBtn) { planParamsSaveBtn.disabled = true; planParamsSaveBtn.textContent = 'Enregistrement…'; }
+    try {
+      const body = { date: dateStr, settings };
+      if (planParamsMode === 'create') {
+        body.objects = [];
+        body.note = '';
+      }
+      const res = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      closePlanParams();
+      loadPlanDatesRange();
+      if (planParamsMode === 'create') {
+        showPlanEditorView(dateStr);
+      } else {
+        planCurrentSettings = extractPlanSettings(data);
+        updatePlanParamsLine();
+        if (!document.getElementById('planTimetableView').classList.contains('hidden')) {
+          loadPlanTimetable();
+        }
+      }
+    } catch (e) {
+      if (planParamsError) {
+        planParamsError.textContent = "Impossible d'enregistrer les paramètres.";
+        planParamsError.classList.remove('hidden');
+      }
+    }
+    if (planParamsSaveBtn) { planParamsSaveBtn.disabled = false; planParamsSaveBtn.textContent = 'Enregistrer les paramètres'; }
+  }
+  if (planParamsSaveBtn) planParamsSaveBtn.addEventListener('click', savePlanParams);
+
+  // ---------- Éditeur d'un plan (objets sélectionnés + note) ----------
 
   function updatePlanStatusLine() {
     const el = document.getElementById('planStatusLine');
@@ -2621,6 +2894,14 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     el.textContent = planExists
       ? `Plan enregistré pour la nuit du ${label} (${planSelectedNames.size} objet${planSelectedNames.size > 1 ? 's' : ''}).`
       : `Aucun plan enregistré pour la nuit du ${label} pour l\u2019instant.`;
+  }
+
+  function updatePlanParamsLine() {
+    const el = document.getElementById('planParamsLine');
+    if (!el) return;
+    const s = planCurrentSettings || {};
+    const minAlt = (s.pref_min_alt !== null && s.pref_min_alt !== undefined) ? s.pref_min_alt : 10;
+    el.textContent = `${planLocationSummary(s)} · ${planTimeRangeSummary(s)} · altitude min ${minAlt}°`;
   }
 
   function updatePlanDeleteBtn() {
@@ -2636,6 +2917,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     if (noteInput) noteInput.value = '';
     planSelectedNames = new Set();
     planExists = false;
+    planCurrentSettings = null;
 
     try {
       const res = await fetch(`/api/plan?date=${dateStr}`);
@@ -2644,12 +2926,18 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
         planSelectedNames = new Set(data.objects || []);
         planExists = !!data.exists;
         if (noteInput) noteInput.value = data.note || '';
+        if (planExists) planCurrentSettings = extractPlanSettings(data);
       }
     } catch (e) {
       // hors-ligne : formulaire vide
     }
 
+    // Plan pas encore créé en base (accès direct sans passer par le popup de
+    // création, ex. lien depuis l'agenda) : on part des réglages généraux.
+    if (!planCurrentSettings) planCurrentSettings = extractPlanSettings(settingsCache);
+
     updatePlanStatusLine();
+    updatePlanParamsLine();
     updatePlanDeleteBtn();
     updatePlanOpenTimelineBtn();
     renderPlanSelectedList();
@@ -2678,6 +2966,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       if (res.ok) {
         const data = await res.json();
         planExists = !!data.exists;
+        planCurrentSettings = extractPlanSettings(data);
+        updatePlanParamsLine();
       }
     } catch (e) {
       // best effort : le formulaire reste tel quel pour cette session
@@ -2694,16 +2984,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     } catch (e) {
       // best effort
     }
-    planSelectedNames = new Set();
-    planExists = false;
-    const noteInput = document.getElementById('planNoteInput');
-    if (noteInput) noteInput.value = '';
-    renderPlanSelectedList();
-    renderPlanCatalogList();
-    updatePlanStatusLine();
-    updatePlanDeleteBtn();
-    updatePlanOpenTimelineBtn();
     loadPlanDatesRange();
+    showPlanListView();
   }
 
   function planRowHtml(o) {
@@ -3137,7 +3419,20 @@ document.addEventListener('click', (e) => {
     showPlanTtLoading('Chargement du programme…');
 
     try {
-      const url = buildSkyUrl(currentLat, currentLon, currentElev, dateStr);
+      const s = planCurrentSettings || {};
+      let lat = currentLat, lon = currentLon, elev = currentElev;
+      if (s.loc_mode === 'manual' && s.loc_lat !== null && s.loc_lat !== undefined
+          && s.loc_lon !== null && s.loc_lon !== undefined) {
+        lat = parseFloat(s.loc_lat);
+        lon = parseFloat(s.loc_lon);
+        elev = parseFloat(s.loc_elev) || 0;
+      }
+      if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) {
+        hidePlanTtLoading();
+        lanes.innerHTML = '<div class="lib-empty">Aucune position définie pour ce plan.</div>';
+        return;
+      }
+      const url = buildSkyUrl(lat, lon, elev, dateStr, s);
       const res = await fetch(url);
       if (!res.ok) throw new Error();
       const data = await res.json();

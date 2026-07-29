@@ -385,15 +385,35 @@
       </section>
 
       <section id="view-plan" class="view hidden">
-        <div id="planMainView">
-          <div class="section-heading"><h2>Prévoir une soirée</h2></div>
+        <div id="planListView">
+          <div class="section-heading">
+            <h2>Prévoir une soirée</h2>
+            <button type="button" id="planCreateBtn" class="icon-btn" title="Créer un plan">
+              <i class='bx bx-plus'></i>
+            </button>
+          </div>
+          <p id="planListEmpty" class="lib-empty hidden">Aucune soirée prévue pour l'instant. Touche « + » pour en créer une.</p>
+          <div id="planList" class="lib-list"></div>
+        </div>
+
+        <div id="planMainView" class="hidden">
+          <div class="section-heading">
+            <button type="button" id="planBackBtn" class="icon-btn" title="Retour à la liste">
+              <i class='bx bx-arrow-back'></i>
+            </button>
+            <h2>Prévoir une soirée</h2>
+            <button type="button" id="planParamsBtn" class="icon-btn" title="Paramètres du plan">
+              <i class='bx bx-slider-alt'></i>
+            </button>
+          </div>
 
           <div class="plan-date-row">
             <button id="planPrevDay" class="cal-nav-btn" title="Jour précédent">‹</button>
             <input type="date" id="planDateInput">
             <button id="planNextDay" class="cal-nav-btn" title="Jour suivant">›</button>
           </div>
-          <p id="planStatusLine" class="settings-hint" style="margin:-6px 0 10px;">—</p>
+          <p id="planStatusLine" class="settings-hint" style="margin:-6px 0;">—</p>
+          <p id="planParamsLine" class="settings-hint" style="margin:0 0 10px;">—</p>
           <button id="planOpenTimelineBtn" type="button" class="login-btn hidden" style="width:100%; margin-bottom:14px; flex:none;">
             <i class='bx bx-time-five'></i> Ouvrir la timeline
           </button>
@@ -898,6 +918,98 @@
           </div>
           <p id="journalAddError" class="settings-hint hidden" style="color:#c4577f;"></p>
           <button id="journalAddSubmit" class="login-btn" style="width:100%;">Ajouter</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="planParamsOverlay" class="info-overlay hidden">
+      <div class="info-sheet" style="padding-bottom: 24px;">
+        <div class="info-sheet-handle"></div>
+        <div class="info-header">
+          <div><h3 style="margin:0;">Paramètres du plan</h3></div>
+          <button id="planParamsClose" class="info-close">✕</button>
+        </div>
+        <p id="planParamsDateLabel" class="settings-hint hidden" style="margin-top:-6px;">—</p>
+        <div id="planParamsDateRow" class="plan-date-row hidden" style="margin:6px 0 0;">
+          <label for="planParamsDateInput" class="settings-hint" style="margin:0 10px 0 0;">Date</label>
+          <input type="date" id="planParamsDateInput">
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:16px; margin-top:10px;">
+
+          <div>
+            <span class="settings-label">Lieu</span>
+            <label class="toggle-row" style="cursor:pointer; padding:8px 0;">
+              <span class="toggle-text">
+                <span class="settings-hint" style="margin:0;">Utiliser le lieu par défaut (réglages)</span>
+              </span>
+              <span class="switch">
+                <input type="checkbox" id="planParamsLocAutoToggle" checked>
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+            </label>
+            <div id="planParamsLocManualBlock" class="hidden" style="display:flex; flex-direction:column; gap:10px;">
+              <button type="button" id="planParamsLocMapBtn" class="retry-btn" style="align-self:flex-start;">Choisir sur la carte</button>
+              <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <label for="planParamsLocLatInput" style="font-size:12px; color:#aaa;">Latitude</label>
+                  <input type="number" id="planParamsLocLatInput" step="0.0001" min="-90" max="90"
+                    style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none; width:110px;">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <label for="planParamsLocLonInput" style="font-size:12px; color:#aaa;">Longitude</label>
+                  <input type="number" id="planParamsLocLonInput" step="0.0001" min="-180" max="180"
+                    style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none; width:110px;">
+                </div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <label for="planParamsLocElevInput" style="font-size:12px; color:#aaa;">Élévation (m)</label>
+                  <input type="number" id="planParamsLocElevInput" step="1"
+                    style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none; width:90px;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px; background:#333; width:100%;"></div>
+
+          <div>
+            <span class="settings-label">Plage horaire</span>
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+              <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                <input type="radio" name="planObsMode" id="planParamsModeMargin" value="margin" checked>
+                <span style="font-weight:500; font-size:14px;">Marge autour du coucher/lever du soleil</span>
+              </label>
+              <div style="margin-left:28px; display:flex; align-items:center; gap:10px;">
+                <label for="planParamsMarginInput" style="font-size:13px; color:#aaa;">Marge (minutes) :</label>
+                <input type="number" id="planParamsMarginInput" min="0" max="180"
+                  style="width:70px; padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none;">
+              </div>
+
+              <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                <input type="radio" name="planObsMode" id="planParamsModeFixed" value="fixed">
+                <span style="font-weight:500; font-size:14px;">Plage horaire fixe</span>
+              </label>
+              <div style="margin-left:28px; display:flex; align-items:center; gap:10px;">
+                <label for="planParamsFixedStartInput" style="font-size:13px; color:#aaa;">De :</label>
+                <input type="time" id="planParamsFixedStartInput" style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none;">
+                <label for="planParamsFixedEndInput" style="font-size:13px; color:#aaa;">À :</label>
+                <input type="time" id="planParamsFixedEndInput" style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none;">
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px; background:#333; width:100%;"></div>
+
+          <div>
+            <span class="settings-label">Altitude minimale (°)</span>
+            <div style="margin-top:8px;">
+              <input type="number" id="planParamsMinAltInput" min="0" max="90"
+                style="padding:6px; background:#222; color:#fff; border:1px solid #444; border-radius:4px; outline:none; width:90px;">
+            </div>
+          </div>
+
+          <p id="planParamsError" class="settings-hint hidden" style="color:#c4577f;"></p>
+          <button id="planParamsSaveBtn" class="login-btn" style="width:100%;">Enregistrer les paramètres</button>
         </div>
       </div>
     </div>

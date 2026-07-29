@@ -26,7 +26,7 @@ from db import (
     init_db, verify_user, create_session, get_user_by_session,
     delete_session, get_settings, update_settings,
     get_favorites, toggle_favorite,
-    get_plan, save_plan, delete_plan, get_plan_counts,
+    get_plan, save_plan, delete_plan, get_plan_counts, list_plans,
     add_journal_entry, get_journal, delete_journal_entry,
 )
 
@@ -671,12 +671,45 @@ def favorites_toggle():
     return jsonify({"name": name, "favorite": is_favorite})
 
 
+
+# Champs de paramètres propres à un plan (lieu, plage horaire, altitude
+# min) : mêmes clés que la table `plans` / PLAN_SETTINGS_FIELDS dans db.py.
+PLAN_SETTINGS_KEYS = (
+    "loc_mode", "loc_lat", "loc_lon", "loc_elev",
+    "pref_mode", "pref_margin", "pref_fixed_start", "pref_fixed_end",
+    "pref_min_alt",
+)
+
+# Correspondance entre les réglages globaux de l'utilisateur (table
+# `settings`) et les champs d'un plan : sert de valeur par défaut lorsqu'on
+# crée un nouveau plan sans préciser explicitement ses propres paramètres
+# ("toujours ceux que j'ai" par défaut, mais personnalisables ensuite).
+def _default_plan_settings_from_user(user_id):
+    settings = get_settings(user_id)
+    return {key: settings.get(key) for key in PLAN_SETTINGS_KEYS}
+
+
+def _plan_to_json(plan):
+    return {
+        "date": plan["date"],
+        "objects": plan["objects"],
+        "note": plan["note"],
+        "exists": True,
+        **{key: plan.get(key) for key in PLAN_SETTINGS_KEYS},
+    }
+
+
 @app.route("/api/plan", methods=["GET", "POST", "DELETE"])
 @login_required
 def plan_api():
-    """Plan de soirée : liste d'objets choisis + note libre, pour un jour
-    donné. GET renvoie le plan existant (ou un plan vide), POST crée/écrase
-    le plan du jour indiqué, DELETE le supprime."""
+    """Plan de soirée : liste d'objets choisis + note libre + paramètres
+    propres au plan (lieu, plage horaire, altitude min), pour un jour donné.
+    GET renvoie le plan existant (ou un plan vide), POST crée/met à jour le
+    plan du jour indiqué, DELETE le supprime.
+
+    Les paramètres du plan sont optionnels dans le payload POST : ceux non
+    fournis reprennent la valeur déjà enregistrée pour ce plan, ou, à la
+    création, les réglages généraux de l'utilisateur."""
     date_str = (request.args.get("date") or "").strip()
     if request.method != "GET":
         payload = request.get_json(silent=True) or {}
@@ -695,22 +728,49 @@ def plan_api():
 
     if request.method == "POST":
         payload = request.get_json(silent=True) or {}
-        objects = payload.get("objects") or []
+        objects = payload.get("objects")
+        if objects is None:
+            existing = get_plan(request.user["id"], date_str)
+            objects = existing["objects"] if existing else []
         if not isinstance(objects, list):
             return jsonify({"error": "objects must be a list"}), 400
         objects = [str(o) for o in objects][:200]
-        note = str(payload.get("note") or "")[:2000]
-        save_plan(request.user["id"], date_str, objects, note)
+
+        note = payload.get("note")
+        if note is None:
+            existing = get_plan(request.user["id"], date_str)
+            note = existing["note"] if existing else ""
+        note = str(note or "")[:2000]
+
+        # Résout les paramètres du plan : valeur envoyée > valeur déjà
+        # enregistrée pour ce plan > réglage général de l'utilisateur.
+        existing_plan = get_plan(request.user["id"], date_str)
+        base_settings = (
+            {key: existing_plan.get(key) for key in PLAN_SETTINGS_KEYS}
+            if existing_plan
+            else _default_plan_settings_from_user(request.user["id"])
+        )
+        incoming_settings = payload.get("settings") or {}
+        plan_settings = {
+            key: incoming_settings.get(key, base_settings.get(key))
+            for key in PLAN_SETTINGS_KEYS
+        }
+
+        save_plan(request.user["id"], date_str, objects, note, plan_settings)
 
     plan = get_plan(request.user["id"], date_str)
     if plan is None:
         return jsonify({"date": date_str, "objects": [], "note": "", "exists": False})
-    return jsonify({
-        "date": plan["date"],
-        "objects": plan["objects"],
-        "note": plan["note"],
-        "exists": True,
-    })
+    return jsonify(_plan_to_json(plan))
+
+
+@app.route("/api/plans", methods=["GET"])
+@login_required
+def plans_list():
+    """Liste tous les plans de l'utilisateur (page Prévoir), avec leurs
+    paramètres, pour afficher la liste des soirées prévues."""
+    plans = list_plans(request.user["id"])
+    return jsonify({"plans": [_plan_to_json(p) for p in plans]})
 
 
 @app.route("/api/plans/range")

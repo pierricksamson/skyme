@@ -57,6 +57,23 @@ ALLOWED_SETTINGS = {
 # l'ancienne latitude/longitude restait en base malgré la demande de reset.
 NULLABLE_SETTINGS = {"loc_lat", "loc_lon"}
 
+# Paramètres propres à chaque plan de soirée (lieu, plage horaire, altitude
+# min). Même forme que ALLOWED_SETTINGS/NULLABLE_SETTINGS ci-dessus, mais
+# stockés par plan plutôt que globalement pour l'utilisateur : un plan donné
+# peut ainsi avoir un lieu et des horaires différents des réglages généraux.
+PLAN_SETTINGS_FIELDS = {
+    "loc_mode": str,
+    "loc_lat": float,
+    "loc_lon": float,
+    "loc_elev": float,
+    "pref_mode": str,
+    "pref_margin": int,
+    "pref_fixed_start": str,
+    "pref_fixed_end": str,
+    "pref_min_alt": float,
+}
+PLAN_SETTINGS_NULLABLE = {"loc_lat", "loc_lon"}
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -115,6 +132,15 @@ def init_db():
                 objects TEXT NOT NULL DEFAULT '[]',
                 note TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL,
+                loc_mode TEXT NOT NULL DEFAULT 'auto',
+                loc_lat REAL,
+                loc_lon REAL,
+                loc_elev REAL NOT NULL DEFAULT 0,
+                pref_mode TEXT NOT NULL DEFAULT 'margin',
+                pref_margin INTEGER NOT NULL DEFAULT 30,
+                pref_fixed_start TEXT NOT NULL DEFAULT '20:00',
+                pref_fixed_end TEXT NOT NULL DEFAULT '06:00',
+                pref_min_alt REAL NOT NULL DEFAULT 10.0,
                 PRIMARY KEY (user_id, date),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
@@ -148,6 +174,27 @@ def init_db():
 
         for col, ddl in migrations.items():
             if col not in existing_cols:
+                conn.execute(ddl)
+
+        # Plans existants créés avant l'ajout des paramètres par plan (lieu,
+        # plage horaire, altitude min) : on ajoute les colonnes manquantes,
+        # avec les mêmes valeurs par défaut que les réglages globaux.
+        existing_plan_cols = {
+            row["name"] for row in conn.execute("PRAGMA table_info(plans)")
+        }
+        plan_migrations = {
+            "loc_mode": "ALTER TABLE plans ADD COLUMN loc_mode TEXT NOT NULL DEFAULT 'auto'",
+            "loc_lat": "ALTER TABLE plans ADD COLUMN loc_lat REAL",
+            "loc_lon": "ALTER TABLE plans ADD COLUMN loc_lon REAL",
+            "loc_elev": "ALTER TABLE plans ADD COLUMN loc_elev REAL NOT NULL DEFAULT 0",
+            "pref_mode": "ALTER TABLE plans ADD COLUMN pref_mode TEXT NOT NULL DEFAULT 'margin'",
+            "pref_margin": "ALTER TABLE plans ADD COLUMN pref_margin INTEGER NOT NULL DEFAULT 30",
+            "pref_fixed_start": "ALTER TABLE plans ADD COLUMN pref_fixed_start TEXT NOT NULL DEFAULT '20:00'",
+            "pref_fixed_end": "ALTER TABLE plans ADD COLUMN pref_fixed_end TEXT NOT NULL DEFAULT '06:00'",
+            "pref_min_alt": "ALTER TABLE plans ADD COLUMN pref_min_alt REAL NOT NULL DEFAULT 10.0",
+        }
+        for col, ddl in plan_migrations.items():
+            if col not in existing_plan_cols:
                 conn.execute(ddl)
 
         conn.commit()
@@ -341,38 +388,104 @@ def toggle_favorite(user_id, object_name):
 
 # ---------- Plans de soirée (objets prévus + note, par jour) ----------
 
+def _row_to_plan(row):
+    data = dict(row)
+    data.pop("user_id", None)
+    try:
+        data["objects"] = json.loads(data["objects"])
+    except (TypeError, ValueError):
+        data["objects"] = []
+    return data
+
+
 def get_plan(user_id, date_str):
-    """Retourne {date, objects, note, updated_at} ou None si aucun plan."""
+    """Retourne le plan complet (objets, note, lieu, plage horaire, altitude
+    min...) ou None si aucun plan n'existe pour ce jour."""
     conn = get_connection()
     try:
         row = conn.execute(
-            "SELECT date, objects, note, updated_at FROM plans WHERE user_id = ? AND date = ?",
+            "SELECT * FROM plans WHERE user_id = ? AND date = ?",
             (user_id, date_str),
         ).fetchone()
         if row is None:
             return None
-        data = dict(row)
-        try:
-            data["objects"] = json.loads(data["objects"])
-        except (TypeError, ValueError):
-            data["objects"] = []
-        return data
+        return _row_to_plan(row)
     finally:
         conn.close()
 
 
-def save_plan(user_id, date_str, objects, note=""):
-    """Crée ou remplace le plan d'un utilisateur pour un jour donné."""
+def list_plans(user_id):
+    """Retourne tous les plans de l'utilisateur (les plus proches d'abord),
+    avec leurs paramètres, pour la liste de la page Prévoir."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM plans WHERE user_id = ? ORDER BY date ASC",
+            (user_id,),
+        ).fetchall()
+        return [_row_to_plan(row) for row in rows]
+    finally:
+        conn.close()
+
+
+def _resolve_plan_settings(plan_settings):
+    """Caste/valide un dict de paramètres de plan (partiel ou complet) et
+    renvoie les 9 valeurs dans l'ordre des colonnes, prêtes pour le SQL.
+    Les champs absents ou invalides restent à None (voir save_plan pour la
+    résolution des valeurs par défaut)."""
+    plan_settings = plan_settings or {}
+    cols = (
+        "loc_mode", "loc_lat", "loc_lon", "loc_elev",
+        "pref_mode", "pref_margin", "pref_fixed_start", "pref_fixed_end",
+        "pref_min_alt",
+    )
+    values = []
+    for col in cols:
+        raw_value = plan_settings.get(col)
+        if raw_value is None:
+            values.append(None)
+            continue
+        caster = PLAN_SETTINGS_FIELDS[col]
+        try:
+            values.append(caster(raw_value))
+        except (TypeError, ValueError):
+            values.append(None)
+    return values
+
+
+def save_plan(user_id, date_str, objects, note="", plan_settings=None):
+    """Crée ou met à jour le plan d'un utilisateur pour un jour donné.
+
+    `plan_settings` (optionnel) contient les paramètres propres au plan :
+    loc_mode/loc_lat/loc_lon/loc_elev (lieu), pref_mode/pref_margin/
+    pref_fixed_start/pref_fixed_end (plage horaire) et pref_min_alt
+    (altitude min). Les valeurs absentes du dict sont résolues par l'appelant
+    (app.py) avant l'appel : à la création, à partir des réglages globaux de
+    l'utilisateur ; à la mise à jour, à partir du plan existant."""
+    values = _resolve_plan_settings(plan_settings)
     conn = get_connection()
     try:
         conn.execute(
             """
-            INSERT INTO plans (user_id, date, objects, note, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO plans (
+                user_id, date, objects, note, updated_at,
+                loc_mode, loc_lat, loc_lon, loc_elev,
+                pref_mode, pref_margin, pref_fixed_start, pref_fixed_end, pref_min_alt
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(user_id, date) DO UPDATE SET
                 objects = excluded.objects,
                 note = excluded.note,
-                updated_at = excluded.updated_at
+                updated_at = excluded.updated_at,
+                loc_mode = excluded.loc_mode,
+                loc_lat = excluded.loc_lat,
+                loc_lon = excluded.loc_lon,
+                loc_elev = excluded.loc_elev,
+                pref_mode = excluded.pref_mode,
+                pref_margin = excluded.pref_margin,
+                pref_fixed_start = excluded.pref_fixed_start,
+                pref_fixed_end = excluded.pref_fixed_end,
+                pref_min_alt = excluded.pref_min_alt
             """,
             (
                 user_id,
@@ -380,6 +493,7 @@ def save_plan(user_id, date_str, objects, note=""):
                 json.dumps(objects, ensure_ascii=False),
                 note or "",
                 datetime.now(timezone.utc).isoformat(),
+                *values,
             ),
         )
         conn.commit()
