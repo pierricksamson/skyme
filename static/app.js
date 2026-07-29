@@ -2635,6 +2635,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   let planListData = []; // dernière liste chargée depuis /api/plans
   let planCurrentSettings = null; // paramètres (lieu/horaire/alt min) du plan ouvert dans l'éditeur
   let planParamsMode = 'edit'; // 'create' (nouveau plan) ou 'edit' (plan déjà ouvert)
+  let planScheduleByName = {}; // { name: objet renvoyé par /api/sky } pour la nuit + les paramètres du plan ouvert
+  let planScheduleLoaded = false; // true une fois le calcul des horaires terminé (pour cette date/ces paramètres)
 
   function planDateInputEl() { return document.getElementById('planDateInput'); }
 
@@ -2870,6 +2872,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       } else {
         planCurrentSettings = extractPlanSettings(data);
         updatePlanParamsLine();
+        loadPlanSchedule();
         if (!document.getElementById('planTimetableView').classList.contains('hidden')) {
           loadPlanTimetable();
         }
@@ -2918,6 +2921,8 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     planSelectedNames = new Set();
     planExists = false;
     planCurrentSettings = null;
+    planScheduleByName = {};
+    planScheduleLoaded = false;
 
     try {
       const res = await fetch(`/api/plan?date=${dateStr}`);
@@ -2942,6 +2947,71 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     updatePlanOpenTimelineBtn();
     renderPlanSelectedList();
     await renderPlanCatalogList();
+    loadPlanSchedule();
+  }
+
+  // Calcule, pour la nuit et les paramètres du plan actuellement ouvert
+  // (lieu, plage horaire, altitude min), l'horaire réel d'observation de
+  // chaque objet du catalogue (mêmes calculs que /api/sky). Sert à afficher
+  // dans la liste des objets prévus soit le créneau de visibilité, soit
+  // "Impossible de voir ce soir là" si l'objet ne dépasse pas l'altitude
+  // minimale sur toute la fenêtre de cette nuit.
+  async function loadPlanSchedule() {
+    const dateStr = planCurrentDate;
+    planScheduleByName = {};
+    planScheduleLoaded = false;
+    renderPlanSelectedList();
+    renderPlanCatalogList();
+
+    const s = planCurrentSettings || {};
+    let lat = currentLat, lon = currentLon, elev = currentElev;
+    if (s.loc_mode === 'manual' && s.loc_lat !== null && s.loc_lat !== undefined
+        && s.loc_lon !== null && s.loc_lon !== undefined) {
+      lat = parseFloat(s.loc_lat);
+      lon = parseFloat(s.loc_lon);
+      elev = parseFloat(s.loc_elev) || 0;
+    }
+    if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) {
+      return; // pas de position connue : on ne peut pas calculer les horaires
+    }
+
+    try {
+      const url = buildSkyUrl(lat, lon, elev, dateStr, s);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      if (planCurrentDate !== dateStr) return; // la date a changé entre-temps
+
+      const byName = {};
+      (data.objects || []).forEach((o) => { byName[o.name] = o; });
+      planScheduleByName = byName;
+      planScheduleLoaded = true;
+    } catch (e) {
+      planScheduleLoaded = false; // hors-ligne / erreur : pas d'horaires affichés
+    }
+    if (planCurrentDate === dateStr) {
+      renderPlanSelectedList();
+      renderPlanCatalogList();
+    }
+  }
+
+  // Formatte l'horaire d'observation d'un objet pour la nuit + les
+  // paramètres du plan ouvert : créneau lever→coucher, "toujours visible",
+  // ou "Impossible de voir ce soir là" si l'objet ne dépasse pas l'altitude
+  // minimale sur toute la fenêtre. Renvoie '' tant que le calcul n'est pas
+  // encore disponible (pas de position, ou chargement en cours).
+  function planScheduleLineHtml(name) {
+    if (!planScheduleLoaded) return '';
+    const sched = planScheduleByName[name];
+    if (!sched) {
+      return `<span class="lib-row-when lib-row-when-impossible">Impossible de voir ce soir là</span>`;
+    }
+    if (sched.always_visible) {
+      const minAlt = (planCurrentSettings && planCurrentSettings.pref_min_alt !== null
+        && planCurrentSettings.pref_min_alt !== undefined) ? planCurrentSettings.pref_min_alt : getMinAlt();
+      return `<span class="lib-row-when lib-row-when-special">Toujours au-dessus de ${minAlt}°</span>`;
+    }
+    return `<span class="lib-row-when">${fmtTime(sched.rise_iso)} – ${fmtTime(sched.set_iso)}</span>`;
   }
 
   async function togglePlanObject(name) {
@@ -2993,12 +3063,17 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const magStr = (o.magnitude !== null && o.magnitude !== undefined) ? `mag ${o.magnitude}` : '—';
     const nameAttr = o.name.replace(/"/g, '&quot;');
     const selected = planSelectedNames.has(o.name);
+    const seenBadge = getObjectJournalStatus(o.name) === 'seen'
+      ? ' <span class="lib-row-vu-badge">VU</span>'
+      : '';
+    const scheduleLine = planScheduleLineHtml(o.name);
     return `
       <div class="lib-row lib-row-clickable lib-row-plan-toggle${selected ? ' active' : ''}" data-name="${nameAttr}">
         <span class="lib-row-dot" style="background:${color}"></span>
         <span class="lib-row-main">
-          <span class="lib-row-name">${o.name}</span>
+          <span class="lib-row-name">${o.name}${seenBadge}</span>
           <span class="lib-row-meta">${CATEGORY_LABEL[o.category] || capitalize(o.category)}</span>
+          ${scheduleLine}
         </span>
         <span class="lib-row-mag">${magStr}</span>
         <button type="button" class="lib-fav-btn${selected ? ' active' : ''}" data-name="${nameAttr}" title="${selected ? 'Retirer du plan' : 'Ajouter au plan'}">
@@ -3066,10 +3141,17 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       const item = catalogList && catalogList.find((o) => o.name === name);
       const color = item ? (CATEGORY_COLOR_VAR[item.category] || 'var(--text-muted)') : 'var(--text-muted)';
       const nameAttr = name.replace(/"/g, '&quot;');
+      const seenBadge = getObjectJournalStatus(name) === 'seen'
+        ? ' <span class="lib-row-vu-badge">VU</span>'
+        : '';
+      const scheduleLine = planScheduleLineHtml(name);
       return `
         <div class="lib-row" data-name="${nameAttr}">
           <span class="lib-row-dot" style="background:${color}"></span>
-          <span class="lib-row-main"><span class="lib-row-name">${name}</span></span>
+          <span class="lib-row-main">
+            <span class="lib-row-name">${name}${seenBadge}</span>
+            ${scheduleLine}
+          </span>
           <button type="button" class="lib-fav-btn active" data-name="${nameAttr}" title="Retirer du plan">
             <i class='bx bx-x'></i>
           </button>

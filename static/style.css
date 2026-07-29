@@ -767,6 +767,9 @@ body.red-filter::after {
 .lib-row-when-special {
   color: var(--accent);
 }
+.lib-row-when-impossible {
+  color: #c4577f;
+}
 .lib-row-side {
   display: flex;
   flex-direction: column;
@@ -1025,9 +1028,11 @@ body.red-filter::after {
   border-radius: 50%;
   background: var(--accent);
   flex: none;
+  display: none;
 }
 .cal-day-dot-plan {
   background: var(--c-galaxy);
+  display: block;
 }
 .cal-day-fav {
   position: absolute;
@@ -1051,6 +1056,7 @@ body.red-filter::after {
 }
 .cal-day-journal-dot {
   background: #4fae6c;
+  display: block;
 }
 
 .journal-choice-btn {
