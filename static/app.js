@@ -3052,7 +3052,47 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     loadPlanDatesRange();
   }
 
+  // ---------- Modale de confirmation générique (non native, remplace window.confirm) ----------
+  const confirmOverlayEl = document.getElementById('confirmOverlay');
+  const confirmTitleEl = document.getElementById('confirmTitle');
+  const confirmMessageEl = document.getElementById('confirmMessage');
+  const confirmOkBtnEl = document.getElementById('confirmOkBtn');
+  const confirmCancelBtnEl = document.getElementById('confirmCancelBtn');
+  const confirmCloseBtnEl = document.getElementById('confirmClose');
+  let confirmResolve = null;
+
+  function closeConfirm(result) {
+    if (confirmOverlayEl) confirmOverlayEl.classList.add('hidden');
+    if (confirmResolve) { confirmResolve(result); confirmResolve = null; }
+  }
+
+  function showConfirm(title, message, okLabel) {
+    if (!confirmOverlayEl) return Promise.resolve(true); // pas de modale dispo : on laisse passer
+    if (confirmTitleEl) confirmTitleEl.textContent = title || 'Confirmer';
+    if (confirmMessageEl) confirmMessageEl.textContent = message || '';
+    if (confirmOkBtnEl) confirmOkBtnEl.textContent = okLabel || 'Supprimer';
+    confirmOverlayEl.classList.remove('hidden');
+    return new Promise((resolve) => { confirmResolve = resolve; });
+  }
+
+  if (confirmOkBtnEl) confirmOkBtnEl.addEventListener('click', () => closeConfirm(true));
+  if (confirmCancelBtnEl) confirmCancelBtnEl.addEventListener('click', () => closeConfirm(false));
+  if (confirmCloseBtnEl) confirmCloseBtnEl.addEventListener('click', () => closeConfirm(false));
+  if (confirmOverlayEl) {
+    confirmOverlayEl.addEventListener('click', (e) => {
+      if (e.target.id === 'confirmOverlay') closeConfirm(false);
+    });
+  }
+
   async function deleteCurrentPlan() {
+    const d = new Date(planCurrentDate);
+    const label = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    const ok = await showConfirm(
+      'Supprimer le plan',
+      `Supprimer le plan prévu pour la nuit du ${label} ? Cette action est définitive.`,
+      'Supprimer',
+    );
+    if (!ok) return;
     try {
       await fetch(`/api/plan?date=${planCurrentDate}`, { method: 'DELETE' });
     } catch (e) {
@@ -3214,11 +3254,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   const planSaveBtnEl = document.getElementById('planSaveBtn');
   if (planSaveBtnEl) planSaveBtnEl.addEventListener('click', savePlan);
   const planDeleteBtnEl = document.getElementById('planDeleteBtn');
-  if (planDeleteBtnEl) planDeleteBtnEl.addEventListener('click', () => {
-    if (window.confirm('Supprimer ce plan ? Cette action est irréversible.')) {
-      deleteCurrentPlan();
-    }
-  });
+  if (planDeleteBtnEl) planDeleteBtnEl.addEventListener('click', deleteCurrentPlan);
 
   async function loadPlanDatesRange() {
     try {

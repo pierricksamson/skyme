@@ -18,22 +18,9 @@ import os
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-DB_PATH = os.path.join("storage", "skyme.db")
+from config import DEFAULT_SETTINGS, PLAN_SETTINGS_KEYS
 
-DEFAULT_SETTINGS = {
-    "zoom_mode": "auto",
-    "zoom_value": 1.0,
-    "pref_mode": "margin",
-    "pref_margin": 30,
-    "pref_fixed_start": "20:00",
-    "pref_fixed_end": "06:00",
-    "pref_min_alt": 10.0,
-    "red_filter": False,
-    "loc_mode": "auto",
-    "loc_lat": None,
-    "loc_lon": None,
-    "loc_elev": 0.0,
-}
+DB_PATH = os.path.join("storage", "skyme.db")
 
 # Type attendu pour chaque paramètre modifiable via /api/settings
 ALLOWED_SETTINGS = {
@@ -61,17 +48,7 @@ NULLABLE_SETTINGS = {"loc_lat", "loc_lon"}
 # min). Même forme que ALLOWED_SETTINGS/NULLABLE_SETTINGS ci-dessus, mais
 # stockés par plan plutôt que globalement pour l'utilisateur : un plan donné
 # peut ainsi avoir un lieu et des horaires différents des réglages généraux.
-PLAN_SETTINGS_FIELDS = {
-    "loc_mode": str,
-    "loc_lat": float,
-    "loc_lon": float,
-    "loc_elev": float,
-    "pref_mode": str,
-    "pref_margin": int,
-    "pref_fixed_start": str,
-    "pref_fixed_end": str,
-    "pref_min_alt": float,
-}
+PLAN_SETTINGS_FIELDS = {key: ALLOWED_SETTINGS[key] for key in PLAN_SETTINGS_KEYS}
 PLAN_SETTINGS_NULLABLE = {"loc_lat", "loc_lon"}
 
 
@@ -103,18 +80,18 @@ def init_db():
 
             CREATE TABLE IF NOT EXISTS settings (
                 user_id INTEGER PRIMARY KEY,
-                zoom_mode TEXT NOT NULL DEFAULT 'auto',
-                zoom_value REAL NOT NULL DEFAULT 1.0,
-                pref_mode TEXT NOT NULL DEFAULT 'margin',
-                pref_margin INTEGER NOT NULL DEFAULT 30,
-                pref_fixed_start TEXT NOT NULL DEFAULT '20:00',
-                pref_fixed_end TEXT NOT NULL DEFAULT '06:00',
-                pref_min_alt REAL NOT NULL DEFAULT 10.0,
-                red_filter INTEGER NOT NULL DEFAULT 0,
-                loc_mode TEXT NOT NULL DEFAULT 'auto',
+                zoom_mode TEXT NOT NULL DEFAULT '{zoom_mode}',
+                zoom_value REAL NOT NULL DEFAULT {zoom_value},
+                pref_mode TEXT NOT NULL DEFAULT '{pref_mode}',
+                pref_margin INTEGER NOT NULL DEFAULT {pref_margin},
+                pref_fixed_start TEXT NOT NULL DEFAULT '{pref_fixed_start}',
+                pref_fixed_end TEXT NOT NULL DEFAULT '{pref_fixed_end}',
+                pref_min_alt REAL NOT NULL DEFAULT {pref_min_alt},
+                red_filter INTEGER NOT NULL DEFAULT {red_filter},
+                loc_mode TEXT NOT NULL DEFAULT '{loc_mode}',
                 loc_lat REAL,
                 loc_lon REAL,
-                loc_elev REAL NOT NULL DEFAULT 0,
+                loc_elev REAL NOT NULL DEFAULT {loc_elev},
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
 
@@ -132,15 +109,15 @@ def init_db():
                 objects TEXT NOT NULL DEFAULT '[]',
                 note TEXT NOT NULL DEFAULT '',
                 updated_at TEXT NOT NULL,
-                loc_mode TEXT NOT NULL DEFAULT 'auto',
+                loc_mode TEXT NOT NULL DEFAULT '{loc_mode}',
                 loc_lat REAL,
                 loc_lon REAL,
-                loc_elev REAL NOT NULL DEFAULT 0,
-                pref_mode TEXT NOT NULL DEFAULT 'margin',
-                pref_margin INTEGER NOT NULL DEFAULT 30,
-                pref_fixed_start TEXT NOT NULL DEFAULT '20:00',
-                pref_fixed_end TEXT NOT NULL DEFAULT '06:00',
-                pref_min_alt REAL NOT NULL DEFAULT 10.0,
+                loc_elev REAL NOT NULL DEFAULT {loc_elev},
+                pref_mode TEXT NOT NULL DEFAULT '{pref_mode}',
+                pref_margin INTEGER NOT NULL DEFAULT {pref_margin},
+                pref_fixed_start TEXT NOT NULL DEFAULT '{pref_fixed_start}',
+                pref_fixed_end TEXT NOT NULL DEFAULT '{pref_fixed_end}',
+                pref_min_alt REAL NOT NULL DEFAULT {pref_min_alt},
                 PRIMARY KEY (user_id, date),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
@@ -159,17 +136,28 @@ def init_db():
             );
             CREATE INDEX IF NOT EXISTS idx_journal_user_date
                 ON journal(user_id, date);
-            """
+            """.format(
+                zoom_mode=DEFAULT_SETTINGS["zoom_mode"],
+                zoom_value=DEFAULT_SETTINGS["zoom_value"],
+                pref_mode=DEFAULT_SETTINGS["pref_mode"],
+                pref_margin=DEFAULT_SETTINGS["pref_margin"],
+                pref_fixed_start=DEFAULT_SETTINGS["pref_fixed_start"],
+                pref_fixed_end=DEFAULT_SETTINGS["pref_fixed_end"],
+                pref_min_alt=DEFAULT_SETTINGS["pref_min_alt"],
+                red_filter=int(DEFAULT_SETTINGS["red_filter"]),
+                loc_mode=DEFAULT_SETTINGS["loc_mode"],
+                loc_elev=DEFAULT_SETTINGS["loc_elev"],
+            )
         )
         existing_cols = {
             row["name"] for row in conn.execute("PRAGMA table_info(settings)")
         }
 
         migrations = {
-            "loc_mode": "ALTER TABLE settings ADD COLUMN loc_mode TEXT NOT NULL DEFAULT 'auto'",
+            "loc_mode": f"ALTER TABLE settings ADD COLUMN loc_mode TEXT NOT NULL DEFAULT '{DEFAULT_SETTINGS['loc_mode']}'",
             "loc_lat": "ALTER TABLE settings ADD COLUMN loc_lat REAL",
             "loc_lon": "ALTER TABLE settings ADD COLUMN loc_lon REAL",
-            "loc_elev": "ALTER TABLE settings ADD COLUMN loc_elev REAL NOT NULL DEFAULT 0",
+            "loc_elev": f"ALTER TABLE settings ADD COLUMN loc_elev REAL NOT NULL DEFAULT {DEFAULT_SETTINGS['loc_elev']}",
         }
 
         for col, ddl in migrations.items():
@@ -183,15 +171,15 @@ def init_db():
             row["name"] for row in conn.execute("PRAGMA table_info(plans)")
         }
         plan_migrations = {
-            "loc_mode": "ALTER TABLE plans ADD COLUMN loc_mode TEXT NOT NULL DEFAULT 'auto'",
+            "loc_mode": f"ALTER TABLE plans ADD COLUMN loc_mode TEXT NOT NULL DEFAULT '{DEFAULT_SETTINGS['loc_mode']}'",
             "loc_lat": "ALTER TABLE plans ADD COLUMN loc_lat REAL",
             "loc_lon": "ALTER TABLE plans ADD COLUMN loc_lon REAL",
-            "loc_elev": "ALTER TABLE plans ADD COLUMN loc_elev REAL NOT NULL DEFAULT 0",
-            "pref_mode": "ALTER TABLE plans ADD COLUMN pref_mode TEXT NOT NULL DEFAULT 'margin'",
-            "pref_margin": "ALTER TABLE plans ADD COLUMN pref_margin INTEGER NOT NULL DEFAULT 30",
-            "pref_fixed_start": "ALTER TABLE plans ADD COLUMN pref_fixed_start TEXT NOT NULL DEFAULT '20:00'",
-            "pref_fixed_end": "ALTER TABLE plans ADD COLUMN pref_fixed_end TEXT NOT NULL DEFAULT '06:00'",
-            "pref_min_alt": "ALTER TABLE plans ADD COLUMN pref_min_alt REAL NOT NULL DEFAULT 10.0",
+            "loc_elev": f"ALTER TABLE plans ADD COLUMN loc_elev REAL NOT NULL DEFAULT {DEFAULT_SETTINGS['loc_elev']}",
+            "pref_mode": f"ALTER TABLE plans ADD COLUMN pref_mode TEXT NOT NULL DEFAULT '{DEFAULT_SETTINGS['pref_mode']}'",
+            "pref_margin": f"ALTER TABLE plans ADD COLUMN pref_margin INTEGER NOT NULL DEFAULT {DEFAULT_SETTINGS['pref_margin']}",
+            "pref_fixed_start": f"ALTER TABLE plans ADD COLUMN pref_fixed_start TEXT NOT NULL DEFAULT '{DEFAULT_SETTINGS['pref_fixed_start']}'",
+            "pref_fixed_end": f"ALTER TABLE plans ADD COLUMN pref_fixed_end TEXT NOT NULL DEFAULT '{DEFAULT_SETTINGS['pref_fixed_end']}'",
+            "pref_min_alt": f"ALTER TABLE plans ADD COLUMN pref_min_alt REAL NOT NULL DEFAULT {DEFAULT_SETTINGS['pref_min_alt']}",
         }
         for col, ddl in plan_migrations.items():
             if col not in existing_plan_cols:

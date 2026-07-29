@@ -1014,9 +1014,25 @@
       </div>
     </div>
 
+    <div id="confirmOverlay" class="info-overlay hidden">
+      <div class="info-sheet" style="padding-bottom: 24px;">
+        <div class="info-sheet-handle"></div>
+        <div class="info-header">
+          <div><h3 id="confirmTitle" style="margin:0;">Confirmer</h3></div>
+          <button id="confirmClose" class="info-close">✕</button>
+        </div>
+        <p id="confirmMessage" class="settings-hint" style="margin-top:6px;"></p>
+        <div style="display:flex; gap:10px; margin-top:16px;">
+          <button type="button" id="confirmCancelBtn" class="login-btn" style="flex:1; background:#222; color:#fff;">Annuler</button>
+          <button type="button" id="confirmOkBtn" class="login-btn" style="flex:1; background:#c4577f;">Supprimer</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
+
 </body>
 </html>

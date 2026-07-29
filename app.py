@@ -22,6 +22,7 @@ import astropy.units as u
 import requests
 
 from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
+import config
 from db import (
     init_db, verify_user, create_session, get_user_by_session,
     delete_session, get_settings, update_settings,
@@ -132,7 +133,7 @@ def object_info():
     return jsonify(fetch_wikipedia_summary(name))
 
 
-STEP_MINUTES = 4
+STEP_MINUTES = config.STEP_MINUTES
 
 # Approximate mean apparent magnitudes (true planetary magnitude depends on
 # phase & sun-earth-planet distance, but fixed values keep the app fully
@@ -163,7 +164,7 @@ def moon_magnitude(t, location):
     return round(-12.7 + 2.5 * np.log10(1 / illum), 2)
 
 
-def find_night_window(location, now_utc, min_alt=10.0):
+def find_night_window(location, now_utc, min_alt=config.DEFAULT_MIN_ALT):
     """Sample the sun's altitude across the next ~36h to find the coming
     moment it crosses below `min_alt` (sunset, or dusk) and the following
     moment it crosses back above it (sunrise, or dawn)."""
@@ -204,7 +205,7 @@ def build_time_array(t_start, t_end, step_minutes=STEP_MINUTES):
     return t_start + offsets * u.minute
 
 
-def find_visibility_window(alt_deg, min_alt=10.0):
+def find_visibility_window(alt_deg, min_alt=config.DEFAULT_MIN_ALT):
     above = alt_deg > min_alt
     if not np.any(above):
         return None
@@ -219,7 +220,7 @@ def find_visibility_window(alt_deg, min_alt=10.0):
     return int(first), int(last), touches_start, touches_end
 
 
-def find_next_rise_far(coord_factory, location, t_ref, min_alt=10.0,
+def find_next_rise_far(coord_factory, location, t_ref, min_alt=config.DEFAULT_MIN_ALT,
                         max_days=30, step_minutes=20):
     """Pour un objet qui ne dépasse pas `min_alt` sur la fenêtre courte de
     `find_rise_set_event` (quelques heures), élargit la recherche jusqu'à
@@ -244,7 +245,7 @@ def find_next_rise_far(coord_factory, location, t_ref, min_alt=10.0,
     return _interp_time(times[idx - 1], times[idx], alt_deg[idx - 1], alt_deg[idx], min_alt)
 
 
-def find_rise_set_event(coord_factory, location, t_ref, min_alt=10.0,
+def find_rise_set_event(coord_factory, location, t_ref, min_alt=config.DEFAULT_MIN_ALT,
                          back_hours=15, fwd_hours=48, step_minutes=5,
                          extended_days=None, extended_step_minutes=20):
     """Locate the *real* rise/set pair for an object, unlimited by any
@@ -326,7 +327,7 @@ def find_rise_set_event(coord_factory, location, t_ref, min_alt=10.0,
 
 
 def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
-                    t_list, frame_list, location, min_alt=10.0, is_moon=False,
+                    t_list, frame_list, location, min_alt=config.DEFAULT_MIN_ALT, is_moon=False,
                     is_favorite=False):
     coord = coord_factory(t_list, location)
     altaz = coord.transform_to(frame_list)
@@ -463,9 +464,9 @@ def sky():
     elev = float(request.args.get("elev", 0) or 0)
 
     try:
-        min_alt = float(request.args.get("min_alt", 10.0))
+        min_alt = float(request.args.get("min_alt", config.DEFAULT_MIN_ALT))
     except (TypeError, ValueError):
-        min_alt = 10.0
+        min_alt = config.DEFAULT_MIN_ALT
     
     if date_str:
         try:
@@ -494,9 +495,9 @@ def sky():
     else:
         # Mode Marge (Choix 2)
         try:
-            margin = float(request.args.get("margin", 30))
+            margin = float(request.args.get("margin", config.DEFAULT_MARGIN_MIN))
         except (TypeError, ValueError):
-            margin = 30
+            margin = config.DEFAULT_MARGIN_MIN
             
         t_start = sunset_t - margin * u.minute
         t_end = sunrise_t + margin * u.minute
@@ -572,7 +573,7 @@ def catalog_list():
         "ra": None,
         "dec": None,
         "favorable": False,
-        "_min_alt_override": -0.83,
+        "_min_alt_override": config.SUN_MIN_ALT,
         "_factory": (lambda times, loc: get_body("sun", times, loc)),
     }, {
         "name": "Moon",
@@ -629,9 +630,9 @@ def catalog_list():
         location = None
 
     try:
-        min_alt = float(request.args.get("min_alt", 10.0))
+        min_alt = float(request.args.get("min_alt", config.DEFAULT_MIN_ALT))
     except (TypeError, ValueError):
-        min_alt = 10.0
+        min_alt = config.DEFAULT_MIN_ALT
 
     now_utc = datetime.now(timezone.utc)
 
@@ -673,12 +674,9 @@ def favorites_toggle():
 
 
 # Champs de paramètres propres à un plan (lieu, plage horaire, altitude
-# min) : mêmes clés que la table `plans` / PLAN_SETTINGS_FIELDS dans db.py.
-PLAN_SETTINGS_KEYS = (
-    "loc_mode", "loc_lat", "loc_lon", "loc_elev",
-    "pref_mode", "pref_margin", "pref_fixed_start", "pref_fixed_end",
-    "pref_min_alt",
-)
+# min) : mêmes clés que la table `plans` / PLAN_SETTINGS_FIELDS dans db.py,
+# définies une seule fois dans config.py.
+PLAN_SETTINGS_KEYS = config.PLAN_SETTINGS_KEYS
 
 # Correspondance entre les réglages globaux de l'utilisateur (table
 # `settings`) et les champs d'un plan : sert de valeur par défaut lorsqu'on
@@ -734,13 +732,13 @@ def plan_api():
             objects = existing["objects"] if existing else []
         if not isinstance(objects, list):
             return jsonify({"error": "objects must be a list"}), 400
-        objects = [str(o) for o in objects][:200]
+        objects = [str(o) for o in objects][:config.PLAN_OBJECTS_MAX]
 
         note = payload.get("note")
         if note is None:
             existing = get_plan(request.user["id"], date_str)
             note = existing["note"] if existing else ""
-        note = str(note or "")[:2000]
+        note = str(note or "")[:config.PLAN_NOTE_MAX_LEN]
 
         # Résout les paramètres du plan : valeur envoyée > valeur déjà
         # enregistrée pour ce plan > réglage général de l'utilisateur.
@@ -805,15 +803,15 @@ def agenda_favorites_count():
     elev = float(request.args.get("elev", 0) or 0)
 
     try:
-        min_alt = float(request.args.get("min_alt", 10.0))
+        min_alt = float(request.args.get("min_alt", config.DEFAULT_MIN_ALT))
     except (TypeError, ValueError):
-        min_alt = 10.0
+        min_alt = config.DEFAULT_MIN_ALT
 
     mode = request.args.get("mode", "margin")
     try:
-        margin = float(request.args.get("margin", 30))
+        margin = float(request.args.get("margin", config.DEFAULT_MARGIN_MIN))
     except (TypeError, ValueError):
-        margin = 30
+        margin = config.DEFAULT_MARGIN_MIN
 
     # Décalage du fuseau horaire local du navigateur (en minutes, ex: +120
     # pour UTC+2), utilisé uniquement en mode "fixed" : fixed_start_hm /
@@ -834,8 +832,8 @@ def agenda_favorites_count():
         except (ValueError, AttributeError):
             return default_h, default_m
 
-    start_h, start_m = parse_hm(request.args.get("fixed_start_hm"), 20, 0)
-    end_h, end_m = parse_hm(request.args.get("fixed_end_hm"), 6, 0)
+    start_h, start_m = parse_hm(request.args.get("fixed_start_hm"), config.DEFAULT_FIXED_START_H, config.DEFAULT_FIXED_START_M)
+    end_h, end_m = parse_hm(request.args.get("fixed_end_hm"), config.DEFAULT_FIXED_END_H, config.DEFAULT_FIXED_END_M)
 
     try:
         start_date = datetime.strptime(request.args["start_date"], "%Y-%m-%d")
@@ -844,7 +842,7 @@ def agenda_favorites_count():
         return jsonify({"error": "start_date/end_date required (YYYY-MM-DD)"}), 400
 
     # Garde-fou : on ne calcule jamais plus de 60 jours d'un coup.
-    if (end_date - start_date).days > 60 or end_date < start_date:
+    if (end_date - start_date).days > config.AGENDA_MAX_RANGE_DAYS or end_date < start_date:
         return jsonify({"error": "invalid date range"}), 400
 
     favorite_set = set(get_favorites(request.user["id"]))
