@@ -1467,6 +1467,22 @@ body.red-filter::after {
   border-color: #6fbf73;
   box-shadow: 0 0 14px rgba(111,191,115,0.6);
 }
+.level-tube--vertical {
+  width: 56px;
+  height: 220px;
+}
+.level-tube--vertical .level-tube-marks {
+  flex-direction: column;
+  padding: 16px 0;
+}
+.level-tube--vertical .level-tube-marks span {
+  width: 16px;
+  height: 1px;
+}
+.level-tube--vertical .level-tube-marks span.mid {
+  width: 1px;
+  height: 100%;
+}
 .level-edge-orientation {
   font-size: 12px;
   color: var(--text-secondary, #9a9a9a);

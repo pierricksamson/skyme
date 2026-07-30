@@ -4239,11 +4239,10 @@ document.addEventListener('click', (e) => {
       const angle = getScreenOrientationAngle();
       return angle === 180 ? { front: -beta, side: -gamma } : { front: beta, side: gamma };
     }
-    // edge-long : paysage, posé sur la tranche longue. On garde le choix
-    // "long" fait par l'utilisateur, l'angle sert juste à choisir le bon signe
-    // selon que le tél est tourné vers la gauche (90°) ou la droite (270°).
-    const angle = getScreenOrientationAngle();
-    return angle === 270 ? { front: gamma, side: -beta } : { front: -gamma, side: beta };
+    // edge-long : paysage, posé sur la tranche longue. Le côté utilisé
+    // (gauche/droite) est déduit du signe de gamma lui-même (tilt from
+    // vertical), pas de screen.orientation.angle (peu fiable en paysage).
+    return gamma >= 0 ? { front: gamma, side: -beta } : { front: -gamma, side: beta };
   }
 
   function edgeOrientationLabel(mode) {
@@ -4259,6 +4258,7 @@ document.addEventListener('click', (e) => {
   });
     document.getElementById('levelFlatFace').classList.toggle('hidden', mode !== 'flat');
     document.getElementById('levelEdgeFace').classList.toggle('hidden', mode === 'flat');
+    document.querySelector('#levelEdgeFace .level-tube').classList.toggle('level-tube--vertical', mode === 'edge-long');
     document.getElementById('levelHint').textContent = mode === 'flat'
       ? 'Lay the phone flat, screen up.'
       : mode === 'edge-short'
@@ -4321,14 +4321,20 @@ document.addEventListener('click', (e) => {
       const tiltFromVertical = Math.abs(front) - 90; // 0° quand le tél est vertical
 
       const clampedSide = Math.max(-45, Math.min(45, side));
-      const x = (clampedSide / 45) * tubeMaxOffset;
-      tubeBubble.style.transform = `translate(calc(-50% + ${x}px), -50%)`;
+      const offset = (clampedSide / 45) * tubeMaxOffset;
+      tubeBubble.style.transform = levelMode === 'edge-long'
+        ? `translate(-50%, calc(-50% + ${offset}px))`
+        : `translate(calc(-50% + ${offset}px), -50%)`;
 
       const isPlumb = Math.abs(side) < okTolerance;
       tubeBubble.classList.toggle('level-ok', isPlumb);
 
       edgeOrientationEl.textContent = edgeOrientationLabel(levelMode);
-      readout.textContent = `${tiltFromVertical.toFixed(1)}° from vertical / ${side.toFixed(1)}° roll`;
+      // Long edge : seul le roll compte (front/tiltFromVertical sert juste
+      // à identifier le côté utilisé dans getEdgeTilt, pas affiché ici).
+      readout.textContent = levelMode === 'edge-long'
+        ? `${side.toFixed(1)}° roll`
+        : `${tiltFromVertical.toFixed(1)}° from vertical / ${side.toFixed(1)}° roll`;
     };
     window.addEventListener('deviceorientation', motionLevelHandler);
   }
