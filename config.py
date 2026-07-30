@@ -7,7 +7,7 @@ ciel (agenda, timeline), etc. Toute valeur par défaut modifiable doit vivre
 ici, pas ailleurs.
 """
 
-v ='v0.5+'
+v ='v0.6'
 
 # ---------- Calcul du ciel (timeline / agenda / plans) ----------
 
