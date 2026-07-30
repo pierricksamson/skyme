@@ -1066,8 +1066,23 @@ function renderInfoDetails(data) {
     azEl.classList.add('hidden');
   }
 
-  raV.textContent = formatRAHours(data.ra_hours);
-  decV.textContent = formatDecDeg(data.dec_deg);
+  // AD/déclinaison du Soleil, de la Lune et des planètes se déplacent
+  // notablement d'un jour à l'autre : sans instant "maintenant" réel
+  // (is_now), la valeur calculée pour une date arbitraire (minuit UTC)
+  // n'a pas de sens à afficher. Uniquement affiché depuis Timeline/
+  // Overview/Schedule/Bibliothèque (is_now=true). Étoiles et objets du
+  // ciel profond ont des coordonnées quasi fixes : toujours affichées.
+  const raDecEl = document.getElementById('infoRADec');
+  const isMovingObject = infoObj && ['sun', 'moon', 'planet'].includes(infoObj.category);
+  if (isMovingObject && !data.is_now) {
+    raV.textContent = '—';
+    decV.textContent = '—';
+    if (raDecEl) raDecEl.classList.add('hidden');
+  } else {
+    raV.textContent = formatRAHours(data.ra_hours);
+    decV.textContent = formatDecDeg(data.dec_deg);
+    if (raDecEl) raDecEl.classList.remove('hidden');
+  }
   distV.textContent = formatDistance(data);
   diamV.textContent = formatDiameter(data.diameter_km);
   massV.textContent = formatSci(data.mass_kg, 'kg');
