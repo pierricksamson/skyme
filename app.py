@@ -785,7 +785,20 @@ def phase_info():
     if not name:
         return jsonify({"error": "name required"}), 400
 
-    t = Time(datetime.now(timezone.utc))
+    # Comme pour /api/sky : si un `date` (YYYY-MM-DD) est fourni, la phase est
+    # calculée pour cette date plutôt que pour l'instant présent. Ceci permet
+    # d'afficher la bonne phase de Lune/planète quand l'objet est consulté
+    # depuis l'agenda (nuit future) ou depuis un plan prévu à l'avance
+    # (date — et éventuellement lieu — différents d'aujourd'hui/maintenant).
+    date_str = request.args.get("date")
+    if date_str:
+        try:
+            now_utc = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return jsonify({"error": "date must be formatted YYYY-MM-DD"}), 400
+    else:
+        now_utc = datetime.now(timezone.utc)
+    t = Time(now_utc)
 
     if name == "Moon":
         return jsonify(moon_phase_info(t))

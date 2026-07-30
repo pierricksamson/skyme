@@ -972,12 +972,22 @@ function refreshSharedFilterViews() {
     }
   }
 
-  async function fetchPhaseInfo(o) {
+  // `ctx` permet de calculer la phase pour un contexte différent
+  // d'"ici et maintenant" : { dateStr, lat, lon, elev }. Utilisé quand
+  // l'objet est ouvert depuis l'agenda (nuit future précise) ou depuis un
+  // plan prévu à l'avance (date, et éventuellement lieu manuel, différents
+  // d'aujourd'hui). Les champs non fournis retombent sur "maintenant" /
+  // le lieu courant de l'app.
+  async function fetchPhaseInfo(o, ctx) {
   try {
     let url = `/api/phase?name=${encodeURIComponent(o.name)}`;
+    if (ctx && ctx.dateStr) url += `&date=${ctx.dateStr}`;
     if (o.category === 'planet') {
-      if (currentLat === null || currentLon === null) return null;
-      url += `&lat=${currentLat}&lon=${currentLon}&elev=${currentElev}`;
+      const lat = (ctx && ctx.lat !== undefined && ctx.lat !== null) ? ctx.lat : currentLat;
+      const lon = (ctx && ctx.lon !== undefined && ctx.lon !== null) ? ctx.lon : currentLon;
+      const elev = (ctx && ctx.elev !== undefined && ctx.elev !== null) ? ctx.elev : currentElev;
+      if (lat === null || lon === null) return null;
+      url += `&lat=${lat}&lon=${lon}&elev=${elev}`;
     }
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -1122,7 +1132,7 @@ function renderInfoPhase(data) {
     if (e.target.id === 'wikiDetailOverlay') closeWikiDetail();
   });
 
-  function openInfo(o) {
+  function openInfo(o, ctx) {
     // Le lever/coucher "vrai" (réel, non limité par la fenêtre d'affichage
     // marge/plage fixe) prime toujours quand il est disponible. Les objets
     // renvoyés par /api/sky l'exposent via true_rise_iso/true_set_iso ; les
@@ -1149,7 +1159,7 @@ function renderInfoPhase(data) {
     if (infoPhaseEl) infoPhaseEl.classList.add('hidden');
     if (o.category === 'moon' || o.category === 'planet') {
       const phaseRequestName = o.name;
-      fetchPhaseInfo(o).then((data) => {
+      fetchPhaseInfo(o, ctx).then((data) => {
         if (infoObj && infoObj.name === phaseRequestName) renderInfoPhase(data);
       });
     }
@@ -1207,6 +1217,8 @@ function renderInfoPhase(data) {
     } else {
       countdownCell.classList.add('hidden');
     }
+
+    if (!(['overview', 'timeline', 'schedule', 'library'].includes(currentView))) { countdownCell.classList.add('hidden'); }
 
     document.getElementById('infoOverlay').classList.remove('hidden');
   }
@@ -1810,7 +1822,11 @@ function closeAgendaDayPreview() {
       const favBadge = fav ? `<span class="b-fav">★</span>` : '';
       block.innerHTML = `${favBadge}<span class="b-name">${o.name}</span>${subLine}`;
       block.title = `${o.name} — ${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}, alt ${o.peak_altitude}°${magStr ? ', ' + magStr : ''}`;
-      block.addEventListener('click', () => openInfo(o));
+      // La phase (lune/planètes) doit correspondre à la nuit affichée dans
+      // l'agenda (qui peut être une date future choisie via le calendrier),
+      // pas à "maintenant".
+      const agendaPhaseCtx = { dateStr: agendaTtDateObj ? toDateStr(agendaTtDateObj) : null };
+      block.addEventListener('click', () => openInfo(o, agendaPhaseCtx));
 
       lanes.appendChild(block);
     });
@@ -2795,6 +2811,23 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   function planDateInputEl() { return document.getElementById('planDateInput'); }
 
+  // Lieu effectif du plan actuellement ouvert : celui défini manuellement
+  // dans les paramètres du plan (loc_mode 'manual'), sinon le lieu courant
+  // de l'app. Centralise la logique déjà utilisée par loadPlanSchedule /
+  // loadPlanTimetable, pour que la phase (lune/planètes) affichée dans la
+  // fiche objet corresponde toujours au lieu réellement utilisé par ce plan.
+  function getPlanLocation() {
+    const s = planCurrentSettings || {};
+    let lat = currentLat, lon = currentLon, elev = currentElev;
+    if (s.loc_mode === 'manual' && s.loc_lat !== null && s.loc_lat !== undefined
+        && s.loc_lon !== null && s.loc_lon !== undefined) {
+      lat = parseFloat(s.loc_lat);
+      lon = parseFloat(s.loc_lon);
+      elev = parseFloat(s.loc_elev) || 0;
+    }
+    return { lat, lon, elev };
+  }
+
   // ---------- Liste des soirées prévues ----------
 
   function showPlanListView() {
@@ -3119,13 +3152,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     renderPlanCatalogList();
 
     const s = planCurrentSettings || {};
-    let lat = currentLat, lon = currentLon, elev = currentElev;
-    if (s.loc_mode === 'manual' && s.loc_lat !== null && s.loc_lat !== undefined
-        && s.loc_lon !== null && s.loc_lon !== undefined) {
-      lat = parseFloat(s.loc_lat);
-      lon = parseFloat(s.loc_lon);
-      elev = parseFloat(s.loc_elev) || 0;
-    }
+    const { lat, lon, elev } = getPlanLocation();
     if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) {
       return; // pas de position connue : on ne peut pas calculer les horaires
     }
@@ -3701,13 +3728,7 @@ document.addEventListener('click', (e) => {
 
     try {
       const s = planCurrentSettings || {};
-      let lat = currentLat, lon = currentLon, elev = currentElev;
-      if (s.loc_mode === 'manual' && s.loc_lat !== null && s.loc_lat !== undefined
-          && s.loc_lon !== null && s.loc_lon !== undefined) {
-        lat = parseFloat(s.loc_lat);
-        lon = parseFloat(s.loc_lon);
-        elev = parseFloat(s.loc_elev) || 0;
-      }
+      const { lat, lon, elev } = getPlanLocation();
       if (lat === null || lon === null || isNaN(lat) || isNaN(lon)) {
         hidePlanTtLoading();
         lanes.innerHTML = '<div class="lib-empty">Aucune position définie pour ce plan.</div>';
@@ -3872,7 +3893,12 @@ document.addEventListener('click', (e) => {
       const favBadge = fav ? `<span class="b-fav">★</span>` : '';
       block.innerHTML = `${favBadge}<span class="b-name">${o.name}</span>${subLine}`;
       block.title = `${o.name} — ${fmtTime(o.rise_iso)}\u2013${fmtTime(o.set_iso)}, alt ${o.peak_altitude}°${magStr ? ', ' + magStr : ''}`;
-      block.addEventListener('click', () => openInfo(o));
+      // La phase (lune/planètes) doit refléter la nuit et le lieu du plan
+      // prévu, pas "maintenant" : on transmet la date du plan ainsi que son
+      // lieu (manuel si défini, sinon lieu courant de l'app).
+      const planLoc = getPlanLocation();
+      const planPhaseCtx = { dateStr: planCurrentDate, lat: planLoc.lat, lon: planLoc.lon, elev: planLoc.elev };
+      block.addEventListener('click', () => openInfo(o, planPhaseCtx));
 
       lanes.appendChild(block);
     });

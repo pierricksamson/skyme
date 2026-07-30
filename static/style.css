@@ -157,7 +157,7 @@ body.red-filter::after {
 
 .app {
   max-width: 480px;
-  margin: 0 auto;
+  margin: 20px auto 0;
   min-height: 100vh;
   position: relative;
   padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom));
