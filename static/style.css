@@ -2199,3 +2199,25 @@ body.red-filter::after {
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
+
+.info-next-slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--hairline);
+}
+.info-next-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.info-next-details {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+}

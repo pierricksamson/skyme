@@ -1118,6 +1118,70 @@ def journal_api():
         "date": date_str, "time": time_str, "note": note,
     })
 
+def _object_factory_and_min_alt(name):
+    """Retourne (factory, min_alt_override) pour un nom d'objet du catalogue,
+    ou (None, None) si l'objet est inconnu."""
+    if name == "Sun":
+        return (lambda times, loc: get_body("sun", times, loc)), config.SUN_MIN_ALT
+    if name == "Moon":
+        return (lambda times, loc: get_body("moon", times, loc)), None
+    if name in PLANET_BODY_NAME:
+        body_key = PLANET_BODY_NAME[name]
+        return (lambda times, loc, bk=body_key: get_body(bk, times, loc)), None
+    for s_name, ra, dec, mag in STARS:
+        if s_name == name:
+            fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+            return (lambda times, loc, c=fixed_coord: c), None
+    for d_name, ra, dec, mag, kind in DEEP_SKY:
+        if d_name == name:
+            fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+            return (lambda times, loc, c=fixed_coord: c), None
+    return None, None
+
+
+@app.route("/api/object/next-event")
+@login_required
+def object_next_event():
+    """Renvoie le prochain créneau de visibilité (lever/coucher) après un
+    instant donné (`after`) — utilisé par la fiche objet ouverte depuis la
+    Bibliothèque pour afficher le créneau suivant celui d'aujourd'hui."""
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+
+    factory, min_alt_override = _object_factory_and_min_alt(name)
+    if factory is None:
+        return jsonify({"error": "unknown object"}), 404
+
+    try:
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "lat/lon required"}), 400
+    elev = float(request.args.get("elev", 0) or 0)
+
+    try:
+        min_alt = float(request.args.get("min_alt", config.DEFAULT_MIN_ALT))
+    except (TypeError, ValueError):
+        min_alt = config.DEFAULT_MIN_ALT
+    if min_alt_override is not None:
+        min_alt = min_alt_override
+
+    after_str = (request.args.get("after") or "").strip()
+    if not after_str:
+        return jsonify({"error": "after required"}), 400
+    try:
+        after_dt = datetime.fromisoformat(after_str.replace("Z", "+00:00"))
+    except ValueError:
+        return jsonify({"error": "after must be a valid ISO datetime"}), 400
+
+    location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
+    # +2 min pour être sûr d'être déjà "sous" le seuil et chercher le
+    # prochain lever, pas celui qui vient de se terminer.
+    t_ref = Time(after_dt) + 2 * u.minute
+
+    event = find_rise_set_event(factory, location, t_ref, min_alt=min_alt, extended_days=30)
+    return jsonify(event)
 
 @app.route("/api/journal/<int:entry_id>", methods=["DELETE"])
 @login_required

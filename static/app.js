@@ -997,6 +997,33 @@ function refreshSharedFilterViews() {
   }
 }
 
+async function fetchNextEvent(o, afterIso) {
+  if (currentLat === null || currentLon === null) return null;
+  try {
+    let url = `/api/object/next-event?name=${encodeURIComponent(o.name)}`;
+    url += `&lat=${currentLat}&lon=${currentLon}&elev=${currentElev}&min_alt=${getMinAlt()}`;
+    url += `&after=${encodeURIComponent(afterIso)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderInfoNextSlot(data) {
+  const wrap = document.getElementById('infoNextSlot');
+  if (!wrap) return;
+  if (!data || !data.rise_iso) { wrap.classList.add('hidden'); return; }
+  document.getElementById('infoNextDate').textContent =
+    new Date(data.rise_iso).toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  document.getElementById('infoNextRise').textContent = fmtTime(data.rise_iso);
+  document.getElementById('infoNextSet').textContent = data.set_iso
+    ? fmtTime(data.set_iso)
+    : (data.always_visible ? 'Toujours' : '—');
+  wrap.classList.remove('hidden');
+}
+
 // Construit le path SVG de la partie éclairée d'un disque (lune/planète)
 // à partir de la fraction illuminée (0..1) et du sens (croissant/décroissant).
 // waxing=true -> partie éclairée à droite ; waxing=false -> à gauche.
@@ -1155,6 +1182,8 @@ function renderInfoPhase(data) {
       if (infoObj && infoObj.name === wikiRequestName) renderInfoWiki(data, wikiRequestName);
     });
 
+    
+
     const infoPhaseEl = document.getElementById('infoPhase');
     if (infoPhaseEl) infoPhaseEl.classList.add('hidden');
     if (o.category === 'moon' || o.category === 'planet') {
@@ -1210,6 +1239,16 @@ function renderInfoPhase(data) {
     const countdownCell = document.getElementById('infoCountdownCell');
     if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
 
+    const infoNextSlotEl = document.getElementById('infoNextSlot');
+    if (infoNextSlotEl) infoNextSlotEl.classList.add('hidden');
+
+    if (ctx && ctx.fromLibrary && hasWindow && !isSun) {
+      const requestName = o.name;
+      fetchNextEvent(o, trueSet).then((data) => {
+        if (infoObj && infoObj.name === requestName) renderInfoNextSlot(data);
+      });
+    }
+
     if (hasWindow) {
       countdownCell.classList.remove('hidden');
       updateInfoCountdown();
@@ -1234,11 +1273,13 @@ function renderInfoPhase(data) {
   }
 
   function closeInfo() {
-    document.getElementById('infoOverlay').classList.add('hidden');
-    if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
-    infoObj = null;
-    closeWikiDetail();
-  }
+  document.getElementById('infoOverlay').classList.add('hidden');
+  if (infoCountdownTimer) { clearInterval(infoCountdownTimer); infoCountdownTimer = null; }
+  const infoNextSlotEl = document.getElementById('infoNextSlot');
+  if (infoNextSlotEl) infoNextSlotEl.classList.add('hidden');
+  infoObj = null;
+  closeWikiDetail();
+}
 
   function updateInfoFavBtn() {
     const btn = document.getElementById('infoFavBtn');
@@ -2778,7 +2819,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     });
   });
 
-  function handleCatalogRowClick(e) {
+  function handleCatalogRowClick(e, fromLibrary) {
     const favBtn = e.target.closest('.lib-fav-btn');
     if (favBtn && favBtn.dataset.name) {
       e.stopPropagation();
@@ -2789,26 +2830,19 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     if (!row || !row.dataset.name) return;
     const catalogItem = catalogList && catalogList.find((o) => o.name === row.dataset.name);
     if (!catalogItem) return;
-    // Les objets de currentData (timeline) portent un true_rise_iso/
-    // true_set_iso calculé par rapport à la nuit affichée, qui peut être
-    // une nuit future (navigation dans l'agenda) différente d'aujourd'hui.
-    // Le catalogue, lui, est toujours calculé par rapport à l'heure
-    // réelle actuelle : on ne préfère donc le timeline que s'il concerne
-    // bien le jour courant, sinon le catalogue reste la seule source
-    // fiable pour le lever/coucher affiché dans la fiche objet.
     const isTodayData = currentData
       && (!currentData.requested_date || currentData.requested_date === toDateStr(new Date()));
     const liveMatch = (isTodayData && currentData.objects)
       ? currentData.objects.find((obj) => obj.name === catalogItem.name)
       : null;
-    openInfo(liveMatch || catalogItem);
+    openInfo(liveMatch || catalogItem, fromLibrary ? { fromLibrary: true } : undefined);
   }
 
   const libListEl = document.getElementById('libList');
-  if (libListEl) libListEl.addEventListener('click', handleCatalogRowClick);
+  if (libListEl) libListEl.addEventListener('click', (e) => handleCatalogRowClick(e, true));
 
   const overviewFavListEl = document.getElementById('overviewFavList');
-  if (overviewFavListEl) overviewFavListEl.addEventListener('click', handleCatalogRowClick);
+  if (overviewFavListEl) overviewFavListEl.addEventListener('click', (e) => handleCatalogRowClick(e, false));
 
   // ---------- Prévoir (planifier une soirée : sélection d'objets + note +
   // paramètres [lieu, plage horaire, altitude min] par jour) ----------
