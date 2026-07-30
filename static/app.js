@@ -1218,7 +1218,17 @@ function renderInfoPhase(data) {
       countdownCell.classList.add('hidden');
     }
 
-    if (!(['overview', 'timeline', 'schedule', 'library'].includes(currentView))) { countdownCell.classList.add('hidden'); }
+    // Dans « Prévoir » (et l'agenda), la fiche objet peut concerner une nuit
+    // future : le compte à rebours (calculé sur l'heure réelle "maintenant")
+    // n'a de sens que si la nuit affichée est bien celle d'aujourd'hui.
+    // ctx.dateStr indique la date du contexte (plan/agenda) ; son absence
+    // signifie qu'on est dans un contexte "ici et maintenant" (donc déjà
+    // aujourd'hui).
+    const isTodayCtx = !ctx || !ctx.dateStr || ctx.dateStr === toDateStr(new Date());
+    const allowedCountdownViews = ['overview', 'timeline', 'schedule', 'library', 'plan', 'agenda'];
+    if (!allowedCountdownViews.includes(currentView) || !isTodayCtx) {
+      countdownCell.classList.add('hidden');
+    }
 
     document.getElementById('infoOverlay').classList.remove('hidden');
   }
