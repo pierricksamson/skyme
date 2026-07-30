@@ -1380,6 +1380,23 @@ function renderInfoPhase(data) {
       closeSideMenu();
     });
   });
+  // ---------- CGU ----------
+  const cguLink = document.getElementById('cguLink');
+  const cguOverlay = document.getElementById('cguOverlay');
+  const cguClose = document.getElementById('cguClose');
+
+  if (cguLink && cguOverlay) {
+    cguLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      cguOverlay.classList.remove('hidden');
+    });
+  }
+  if (cguClose) cguClose.addEventListener('click', () => cguOverlay.classList.add('hidden'));
+  if (cguOverlay) {
+    cguOverlay.addEventListener('click', (e) => {
+      if (e.target.id === 'cguOverlay') cguOverlay.classList.add('hidden');
+    });
+  }
 
   retryBtn.addEventListener('click', resolveLocation);
 

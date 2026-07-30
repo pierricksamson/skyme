@@ -614,7 +614,7 @@
               <span class="switch-track"><span class="switch-thumb"></span></span>
             </span>
           </label>
-          
+
           <div id="locManualBlock" class="hidden" style="display:flex; flex-direction:column; gap:14px;">
             <button type="button" id="locMapBtn" class="retry-btn" style="align-self:flex-start;">Choisir sur la carte</button>
 
@@ -797,7 +797,7 @@
           </button>
         </div>
         <div class="side-menu-footer">
-          <span class="side-menu-footer-word">{{ v }}</span>
+          <span class="side-menu-footer-word" style="color: white;">{{ v }} - <a href="#" id="cguLink" style="color:white; text-decoration: none;">CGU</a></span>
         </div>
       </nav>
     </div>
@@ -1060,6 +1060,34 @@
         </div>
       </div>
     </div>
+    <div id="cguOverlay" class="info-overlay hidden" style="z-index: 10000;">
+  <div class="info-sheet" style="padding-bottom: 24px; max-height: 80vh; overflow-y: auto;">
+    <div class="info-sheet-handle"></div>
+    <div class="info-header">
+      <div><h3 style="margin:0;">Conditions Générales d'Utilisation</h3></div>
+      <button id="cguClose" class="info-close">✕</button>
+    </div>
+    <div class="settings-hint" style="line-height:1.6; margin-top:10px;">
+      <p><strong style="color:var(--text);">1. Objet</strong><br>
+      Skyme est une application personnelle d'aide à la planification d'observations astronomiques. Elle fournit des estimations (lever/coucher d'astres, magnitude, altitude) à titre indicatif, calculées hors ligne via Astropy.</p>
+
+      <p><strong style="color:var(--text);">2. Précision des données</strong><br>
+      Les calculs sont approximatifs (± 1 min / ± 0,1°). Skyme ne garantit aucune exactitude scientifique et ne doit pas être utilisé comme seule source pour une observation critique.</p>
+
+      <p><strong style="color:var(--text);">3. Données personnelles</strong><br>
+      Position géographique, favoris, plans, journal d'observation et préférences sont stockés côté serveur et associés à votre compte. Aucune donnée n'est partagée avec un tiers, hormis les requêtes ponctuelles à Wikipedia (résumés d'objets) et OpenStreetMap (carte).</p>
+
+      <p><strong style="color:var(--text);">4. Compte</strong><br>
+      L'accès nécessite un identifiant et une passkey personnels. Vous êtes responsable de leur confidentialité.</p>
+
+      <p><strong style="color:var(--text);">5. Usage</strong><br>
+      Application à usage personnel, fournie "en l'état", sans garantie de disponibilité continue.</p>
+
+      <p><strong style="color:var(--text);">6. Avertissement solaire</strong><br>
+      Ne jamais observer le Soleil à l'œil nu, aux jumelles ou au télescope sans filtre solaire certifié.</p>
+    </div>
+  </div>
+</div>
 
   </div>
 
