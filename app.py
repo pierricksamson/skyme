@@ -1271,7 +1271,7 @@ def get_physical_info(name):
 
     return info
 
-
+'''
 @app.route("/api/object/details")
 @login_required
 def object_details():
@@ -1326,6 +1326,57 @@ def object_details():
         "azimuth_deg": round(float(altaz.az.deg), 1),
         "altitude_deg": round(float(altaz.alt.deg), 1),
         "is_now": is_now,
+        "distance_km": round(distance_km) if distance_km is not None else None,
+        **physical,
+    })'''
+
+
+@app.route("/api/object/details")
+@login_required
+def object_details():
+    """Position instantanée (azimut/élévation/AD/déclinaison) + données
+    physiques approximatives (distance, diamètre, masse, volume) pour la
+    popup info. Azimut/élévation ne sont renvoyés que si aucune `date` n'est
+    fournie (sinon ils n'auraient pas de sens pour une nuit future)."""
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+
+    factory, _min_alt_override = _object_factory_and_min_alt(name)
+    if factory is None:
+        return jsonify({"error": "unknown object"}), 404
+
+    try:
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "lat/lon required"}), 400
+    elev = float(request.args.get("elev", 0) or 0)
+    location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
+
+    now_utc = datetime.now(timezone.utc)
+    t = Time(now_utc)
+
+    coord = factory(t, location)
+    icrs = coord.icrs
+    altaz = coord.transform_to(AltAz(obstime=t, location=location))
+
+    category = _object_category(name)
+    physical = get_physical_info(name)
+
+    distance_km = None
+    if category in ("sun", "moon", "planet"):
+        try:
+            distance_km = float(coord.distance.to(u.km).value)
+        except Exception:
+            distance_km = None
+
+    return jsonify({
+        "ra_hours": round(float(icrs.ra.hour), 3),
+        "dec_deg": round(float(icrs.dec.deg), 2),
+        "azimuth_deg": round(float(altaz.az.deg), 1),
+        "altitude_deg": round(float(altaz.alt.deg), 1),
+        "is_now": False,
         "distance_km": round(distance_km) if distance_km is not None else None,
         **physical,
     })
