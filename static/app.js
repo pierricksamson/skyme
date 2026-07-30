@@ -2808,6 +2808,9 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   let planParamsMode = 'edit'; // 'create' (nouveau plan) ou 'edit' (plan déjà ouvert)
   let planScheduleByName = {}; // { name: objet renvoyé par /api/sky } pour la nuit + les paramètres du plan ouvert
   let planScheduleLoaded = false; // true une fois le calcul des horaires terminé (pour cette date/ces paramètres)
+  let planWindowStart = null; // début de la fenêtre d'observation (ISO) de la nuit du plan ouvert
+  let planWindowEnd = null; // fin de la fenêtre d'observation (ISO) de la nuit du plan ouvert
+  let planCountdownTimer = null;
 
   function planDateInputEl() { return document.getElementById('planDateInput'); }
 
@@ -2835,6 +2838,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const mainView = document.getElementById('planMainView');
     if (listView) listView.classList.remove('hidden');
     if (mainView) mainView.classList.add('hidden');
+    if (planCountdownTimer) { clearInterval(planCountdownTimer); planCountdownTimer = null; }
     loadPlanList();
   }
 
@@ -3148,8 +3152,11 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const dateStr = planCurrentDate;
     planScheduleByName = {};
     planScheduleLoaded = false;
+    planWindowStart = null;
+    planWindowEnd = null;
     renderPlanSelectedList();
     renderPlanCatalogList();
+    updatePlanCountdown();
 
     const s = planCurrentSettings || {};
     const { lat, lon, elev } = getPlanLocation();
@@ -3168,12 +3175,55 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       (data.objects || []).forEach((o) => { byName[o.name] = o; });
       planScheduleByName = byName;
       planScheduleLoaded = true;
+      planWindowStart = data.window_start || null;
+      planWindowEnd = data.window_end || null;
     } catch (e) {
       planScheduleLoaded = false; // hors-ligne / erreur : pas d'horaires affichés
     }
     if (planCurrentDate === dateStr) {
       renderPlanSelectedList();
       renderPlanCatalogList();
+      updatePlanCountdown();
+    }
+  }
+
+  // Si la nuit du plan actuellement ouvert est celle d'aujourd'hui, affiche
+  // un compte à rebours vers le début (ou, si déjà commencée, vers la fin)
+  // de la fenêtre d'observation de cette nuit. Se cache sinon (plan futur/
+  // passé, ou fenêtre pas encore calculée).
+  function updatePlanCountdown() {
+    const cell = document.getElementById('planCountdownCell');
+    const labelEl = document.getElementById('planCountdownLabel');
+    const valueEl = document.getElementById('planCountdownValue');
+    if (!cell || !labelEl || !valueEl) return;
+
+    const isToday = planCurrentDate === toDateStr(new Date());
+    if (!isToday || !planWindowStart || !planWindowEnd) {
+      cell.classList.add('hidden');
+      if (planCountdownTimer) { clearInterval(planCountdownTimer); planCountdownTimer = null; }
+      return;
+    }
+
+    const now = Date.now();
+    const startT = new Date(planWindowStart).getTime();
+    const endT = new Date(planWindowEnd).getTime();
+
+    let diffMs;
+    if (now < startT) {
+      labelEl.textContent = 'Début de la soirée dans';
+      diffMs = startT - now;
+    } else if (now <= endT) {
+      labelEl.textContent = 'Fin de la soirée dans';
+      diffMs = endT - now;
+    } else {
+      labelEl.textContent = 'Soirée terminée';
+      diffMs = 0;
+    }
+    valueEl.textContent = formatCountdownMs(diffMs);
+    cell.classList.remove('hidden');
+
+    if (!planCountdownTimer) {
+      planCountdownTimer = setInterval(updatePlanCountdown, 1000);
     }
   }
 
@@ -3388,11 +3438,22 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
 
   function handlePlanRowClick(e) {
     const btn = e.target.closest('.lib-fav-btn');
+    if (btn && btn.dataset.name) {
+      // Clic sur le bouton en bout de ligne : on ajoute/retire du plan.
+      e.stopPropagation();
+      togglePlanObject(btn.dataset.name);
+      return;
+    }
+    // Clic ailleurs sur la ligne : on ouvre la fiche détaillée de l'objet,
+    // sans modifier la sélection du plan (comme dans la Bibliothèque).
     const row = e.target.closest('.lib-row');
-    const name = (btn && btn.dataset.name) || (row && row.dataset.name);
+    const name = row && row.dataset.name;
     if (!name) return;
-    e.stopPropagation();
-    togglePlanObject(name);
+    const catalogItem = catalogList && catalogList.find((o) => o.name === name);
+    if (!catalogItem) return;
+    const planLoc = getPlanLocation();
+    const planPhaseCtx = { dateStr: planCurrentDate, lat: planLoc.lat, lon: planLoc.lon, elev: planLoc.elev };
+    openInfo(catalogItem, planPhaseCtx);
   }
 
   const planCatalogListEl = document.getElementById('planCatalogList');

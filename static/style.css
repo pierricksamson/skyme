@@ -895,6 +895,16 @@ body.red-filter::after {
 #infoCountdownCell .info-label {
   font-size: 11px;
 }
+#planCountdownCell {
+  align-items: center;
+  text-align: center;
+  padding: 14px 14px 16px;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+#planCountdownCell .info-label {
+  font-size: 11px;
+}
 
 /* ---------- Schedule table ---------- */
 .schedule-table {
