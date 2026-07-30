@@ -4384,6 +4384,21 @@ document.addEventListener('click', (e) => {
       const tickColor = isMajor ? 'var(--accent)' : 'var(--text-muted)';
       const tickOpacity = isMajor ? '0.9' : (isMedium ? '0.6' : '0.35');
       svgMarkup += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${tickColor}" stroke-width="${tickWidth}" opacity="${tickOpacity}"/>`;
+
+      // Sous-graduations fines : chaque secteur d'heure est divisé en 5
+      // parts égales (fractions 0 -> 1 par pas de 1/5), soit 4 petits ticks
+      // intermédiaires entre deux graduations horaires.
+      for (let s = 1; s <= 4; s++) {
+        const frac = s / 5; // 0.2, 0.4, 0.6, 0.8
+        const subDeg = h * 30 + frac * 30;
+        const sa = (subDeg - 90) * Math.PI / 180;
+        const subTickLen = 2.5;
+        const sx1 = cx + r * Math.cos(sa);
+        const sy1 = cy + r * Math.sin(sa);
+        const sx2 = cx + (r - subTickLen) * Math.cos(sa);
+        const sy2 = cy + (r - subTickLen) * Math.sin(sa);
+        svgMarkup += `<line x1="${sx1}" y1="${sy1}" x2="${sx2}" y2="${sy2}" stroke="var(--text-muted)" stroke-width="0.5" opacity="0.25"/>`;
+      }
     }
 
     svgMarkup += `
