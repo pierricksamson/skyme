@@ -2674,12 +2674,12 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     document.getElementById('statDeepSky').textContent = stats.deep_sky_total;
 
     const breakdown = document.getElementById('libraryBreakdown');
-    const deepKinds = ['galaxy', 'nebula', 'cluster'];
+    const deepKinds = ['galaxy', 'nebula', 'cluster', 'comet', 'asteroid', 'satellite'];
     breakdown.innerHTML = deepKinds
       .filter((k) => stats.counts[k])
       .map((k) => `
         <div class="breakdown-row">
-          <span class="breakdown-label">${capitalize(k)}</span>
+          <span class="breakdown-label">${CATEGORY_LABEL[k] || capitalize(k)}</span>
           <span class="breakdown-value">${stats.counts[k]}</span>
         </div>
       `).join('');
@@ -2694,6 +2694,9 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     galaxy: 'var(--c-galaxy)',
     nebula: 'var(--c-nebula)',
     cluster: 'var(--c-cluster)',
+    comet: 'var(--c-comet)',
+    asteroid: 'var(--c-asteroid)',
+    satellite: 'var(--c-satellite)',
   };
   const CATEGORY_LABEL = {
     sun: 'Soleil',
@@ -2703,6 +2706,9 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     galaxy: 'Galaxie',
     nebula: 'Nébuleuse',
     cluster: 'Amas',
+    comet: 'Comète',
+    asteroid: 'Astéroïde',
+    satellite: 'Satellite',
   };
 
   let catalogList = null;

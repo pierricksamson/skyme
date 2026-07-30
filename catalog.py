@@ -115,12 +115,15 @@ PLANETS = {
 }
 
 CATEGORY_COLOR = {
-    "moon":    "#d9d2c4",
-    "planet":  "#c98a4b",
-    "star":    "#eae0b8",
-    "galaxy":  "#8f7fc9",
-    "nebula":  "#c4577f",
-    "cluster": "#4fa89c",
+    "moon":      "#d9d2c4",
+    "planet":    "#c98a4b",
+    "star":      "#eae0b8",
+    "galaxy":    "#8f7fc9",
+    "nebula":    "#c4577f",
+    "cluster":   "#4fa89c",
+    "comet":     "#7fd1c9",
+    "asteroid":  "#a68a64",
+    "satellite": "#5b9bd5",
 }
 
 # ---------- Données physiques/distances (approximatives, indicatives) ----------

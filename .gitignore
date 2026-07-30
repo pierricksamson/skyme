@@ -4,5 +4,6 @@ env
 ssl
 skyme.db
 wiki_cache.json
+tle_cache.json
 *jpg
 appinventor*

@@ -23,6 +23,11 @@ import astropy.units as u
 import requests
 
 from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
+from space_objects import (
+    ASTEROIDS, COMETS, SATELLITE_NORAD_ID,
+    asteroid_factory, comet_factory, satellite_factory,
+    asteroid_magnitude, comet_magnitude, satellite_magnitude,
+)
 import config
 from db import (
     init_db, verify_user, create_session, get_user_by_session,
@@ -443,7 +448,7 @@ def find_rise_set_event(coord_factory, location, t_ref, min_alt=config.DEFAULT_M
 
 def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
                     t_list, frame_list, location, min_alt=config.DEFAULT_MIN_ALT, is_moon=False,
-                    is_favorite=False, is_planet=False, planet_body_key=None):
+                    is_favorite=False, is_planet=False, planet_body_key=None, mag_func=None):
     coord = coord_factory(t_list, location)
     altaz = coord.transform_to(frame_list)
     alt_deg = altaz.alt.deg
@@ -467,6 +472,11 @@ def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
         mag = moon_magnitude(t_list[peak_idx], location)
     elif is_planet and planet_body_key:
         mag = compute_planet_magnitude(name, planet_body_key, t_list[peak_idx], location)
+    elif mag_func is not None:
+        try:
+            mag = mag_func(t_list[peak_idx], location)
+        except Exception:
+            mag = fixed_mag
 
     duration_min = (set_t - rise_t).sec / 60.0
 
@@ -657,6 +667,37 @@ def sky():
         if obj:
             objects.append(obj)
 
+    for name, elements in ASTEROIDS.items():
+        factory = asteroid_factory(elements)
+        obj = compute_object(factory, name, "asteroid", None, t_start, t_end,
+                              t_list, frame_list, location, min_alt=min_alt,
+                              is_favorite=(name in favorites),
+                              mag_func=(lambda t, loc, n=name: asteroid_magnitude(n, t, loc)))
+        if obj:
+            objects.append(obj)
+
+    for name, elements in COMETS.items():
+        factory = comet_factory(elements)
+        obj = compute_object(factory, name, "comet", None, t_start, t_end,
+                              t_list, frame_list, location, min_alt=min_alt,
+                              is_favorite=(name in favorites),
+                              mag_func=(lambda t, loc, n=name: comet_magnitude(n, t, loc)))
+        if obj:
+            objects.append(obj)
+
+    # Objets artificiels (ISS, télescopes en orbite, stations...) : leur
+    # visibilité change de nuit en nuit (plusieurs passages/nuit possibles),
+    # on ne retient ici que le premier créneau visible de la fenêtre, comme
+    # pour tous les autres objets.
+    for name, norad_id in SATELLITE_NORAD_ID.items():
+        factory = satellite_factory(norad_id)
+        obj = compute_object(factory, name, "satellite", None, t_start, t_end,
+                              t_list, frame_list, location, min_alt=min_alt,
+                              is_favorite=(name in favorites),
+                              mag_func=(lambda t, loc, n=name: satellite_magnitude(n, t, loc)))
+        if obj:
+            objects.append(obj)
+
     for name, ra, dec, mag, kind in DEEP_SKY:
         fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
         factory = (lambda times, loc, c=fixed_coord: c)
@@ -735,6 +776,36 @@ def catalog_list():
             "_factory": (lambda times, loc, c=fixed_coord: c),
         })
 
+    for name, elements in ASTEROIDS.items():
+        items.append({
+            "name": name,
+            "category": "asteroid",
+            "magnitude": None,
+            "ra": None,
+            "dec": None,
+            "_factory": asteroid_factory(elements),
+        })
+
+    for name, elements in COMETS.items():
+        items.append({
+            "name": name,
+            "category": "comet",
+            "magnitude": None,
+            "ra": None,
+            "dec": None,
+            "_factory": comet_factory(elements),
+        })
+
+    for name, norad_id in SATELLITE_NORAD_ID.items():
+        items.append({
+            "name": name,
+            "category": "satellite",
+            "magnitude": None,
+            "ra": None,
+            "dec": None,
+            "_factory": satellite_factory(norad_id),
+        })
+
     # Lever/coucher réel (non limité par une fenêtre d'affichage), calculé
     # uniquement si une position est fournie : avec les paramètres actuels
     # (position, altitude minimale), pour savoir quand un objet se lève et
@@ -774,6 +845,21 @@ def catalog_list():
                     item["name"], PLANET_BODY_NAME[item["name"]], Time(now_utc), location)
             elif item["category"] == "moon":
                 item["magnitude"] = moon_magnitude(Time(now_utc), location)
+            elif item["category"] == "asteroid":
+                try:
+                    item["magnitude"] = asteroid_magnitude(item["name"], Time(now_utc), location)
+                except Exception:
+                    item["magnitude"] = None
+            elif item["category"] == "comet":
+                try:
+                    item["magnitude"] = comet_magnitude(item["name"], Time(now_utc), location)
+                except Exception:
+                    item["magnitude"] = None
+            elif item["category"] == "satellite":
+                try:
+                    item["magnitude"] = satellite_magnitude(item["name"], Time(now_utc), location)
+                except Exception:
+                    item["magnitude"] = None
 
     items.sort(key=lambda o: o["name"])
     return jsonify({"items": items})
@@ -1136,6 +1222,12 @@ def _object_factory_and_min_alt(name):
         if d_name == name:
             fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
             return (lambda times, loc, c=fixed_coord: c), None
+    if name in ASTEROIDS:
+        return asteroid_factory(ASTEROIDS[name]), None
+    if name in COMETS:
+        return comet_factory(COMETS[name]), None
+    if name in SATELLITE_NORAD_ID:
+        return satellite_factory(SATELLITE_NORAD_ID[name]), None
     return None, None
 
 
@@ -1206,6 +1298,9 @@ def catalog_stats():
         "planet": len(PLANET_MAG),
         "star": len(STARS),
         **deep_sky_by_kind,
+        "asteroid": len(ASTEROIDS),
+        "comet": len(COMETS),
+        "satellite": len(SATELLITE_NORAD_ID),
     }
     total = sum(counts.values())
 
@@ -1230,6 +1325,12 @@ def _object_category(name):
     for d_name, _ra, _dec, _mag, kind in DEEP_SKY:
         if d_name == name:
             return kind
+    if name in ASTEROIDS:
+        return "asteroid"
+    if name in COMETS:
+        return "comet"
+    if name in SATELLITE_NORAD_ID:
+        return "satellite"
     return None
 
 
@@ -1267,6 +1368,29 @@ def get_physical_info(name):
         distance_ly, size_ly = DEEP_SKY_INFO[name]
         info["distance_ly"] = distance_ly
         info["diameter_km"] = size_ly * LY_KM
+        return info
+
+    from space_objects import ASTEROID_PHYSICAL, COMET_PHYSICAL, SATELLITE_PHYSICAL
+
+    if name in ASTEROID_PHYSICAL:
+        diameter_km, mass_kg = ASTEROID_PHYSICAL[name]
+        info["diameter_km"] = diameter_km
+        info["mass_kg"] = mass_kg
+        info["volume_km3"] = _sphere_volume_km3(diameter_km)
+        return info
+
+    if name in COMET_PHYSICAL:
+        # Diamètre du noyau uniquement (la chevelure/queue n'a pas de
+        # taille "physique" fixe : elle dépend de la distance au Soleil).
+        info["diameter_km"] = COMET_PHYSICAL[name]
+        return info
+
+    if name in SATELLITE_PHYSICAL:
+        # Pas une sphère : "diameter_km" sert ici de proxy de taille
+        # (plus grande dimension), indicatif seulement.
+        size_km, mass_kg = SATELLITE_PHYSICAL[name]
+        info["diameter_km"] = size_km
+        info["mass_kg"] = mass_kg
         return info
 
     return info
@@ -1319,9 +1443,15 @@ def object_details():
     physical = get_physical_info(name)
 
     distance_km = None
-    if category in ("sun", "moon", "planet"):
+    if category in ("sun", "moon", "planet", "asteroid", "comet", "satellite"):
         try:
-            distance_km = float(coord.distance.to(u.km).value)
+            # .cartesian.norm() fonctionne quel que soit le type de
+            # représentation sous-jacente (contrairement à .distance, qui
+            # n'est exposé que si la frame utilise une représentation
+            # sphérique) : c'est le cas pour get_body (planètes/lune) mais
+            # pas pour les comètes/astéroïdes/satellites, construits en
+            # coordonnées cartésiennes.
+            distance_km = float(coord.cartesian.norm().to(u.km).value)
         except Exception:
             distance_km = None
 
