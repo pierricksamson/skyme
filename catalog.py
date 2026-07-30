@@ -102,3 +102,87 @@ CATEGORY_COLOR = {
     "nebula":  "#c4577f",
     "cluster": "#4fa89c",
 }
+
+# ---------- Données physiques/distances (approximatives, indicatives) ----------
+
+STAR_DISTANCE_LY = {
+    "Sirius": 8.6, "Canopus": 310, "Arcturus": 37, "Vega": 25, "Capella": 43,
+    "Rigel": 860, "Procyon": 11.5, "Betelgeuse": 548, "Achernar": 139,
+    "Altair": 17, "Aldebaran": 65, "Antares": 550, "Spica": 250, "Pollux": 34,
+    "Fomalhaut": 25, "Deneb": 2600, "Regulus": 79, "Castor": 51,
+    "Bellatrix": 250, "Polaris": 433, "Algol": 90, "Almach": 350,
+    "Mizar": 78, "Alnitak": 800, "Alioth": 81, "Dubhe": 123, "Diphda": 96,
+    "Mirfak": 510, "Alphard": 177, "Hamal": 66,
+}
+
+# name -> (rayon en rayons solaires, masse en masses solaires)
+STAR_PHYSICAL = {
+    "Sirius": (1.71, 2.02), "Canopus": (71, 8.0), "Arcturus": (25.4, 1.08),
+    "Vega": (2.36, 2.14), "Capella": (11.98, 2.57), "Rigel": (78.9, 21),
+    "Procyon": (2.05, 1.5), "Betelgeuse": (764, 16.5), "Achernar": (7.3, 6.7),
+    "Altair": (1.63, 1.79), "Aldebaran": (44.2, 1.16), "Antares": (680, 12),
+    "Spica": (7.47, 11.43), "Pollux": (9.06, 1.91), "Fomalhaut": (1.84, 1.92),
+    "Deneb": (203, 19), "Regulus": (4.35, 3.8), "Castor": (2.14, 2.37),
+    "Bellatrix": (5.75, 7.7), "Polaris": (37.5, 5.4), "Algol": (2.73, 3.17),
+    "Almach": (80, 15), "Mizar": (2.4, 2.2), "Alnitak": (20, 33),
+    "Alioth": (4.14, 2.91), "Dubhe": (17.03, 4.25), "Diphda": (16.78, 2.8),
+    "Mirfak": (68, 8.5), "Alphard": (50.5, 3.0), "Hamal": (14.9, 1.5),
+}
+
+# name -> (distance_ly, taille apparente linéaire en années-lumière)
+DEEP_SKY_INFO = {
+    "M31 Andromeda Galaxy": (2_500_000, 220_000),
+    "M33 Triangulum Galaxy": (2_700_000, 60_000),
+    "M81 Bode's Galaxy": (12_000_000, 90_000),
+    "M82 Cigar Galaxy": (12_000_000, 37_000),
+    "M104 Sombrero Galaxy": (28_000_000, 50_000),
+    "M51 Whirlpool Galaxy": (23_000_000, 60_000),
+    "M63 Sunflower Galaxy": (27_000_000, 100_000),
+    "M101 Pinwheel Galaxy": (21_000_000, 170_000),
+    "M87 Virgo A": (53_000_000, 120_000),
+    "M74 Phantom Galaxy": (32_000_000, 95_000),
+    "M1 Crab Nebula": (6_500, 11),
+    "M8 Lagoon Nebula": (4_100, 110),
+    "M16 Eagle Nebula": (7_000, 70),
+    "M17 Swan Nebula": (5_500, 15),
+    "M20 Trifid Nebula": (5_200, 40),
+    "M27 Dumbbell Nebula": (1_360, 3),
+    "M42 Orion Nebula": (1_344, 24),
+    "M43 De Mairan's Nebula": (1_600, 20),
+    "M57 Ring Nebula": (2_300, 1.3),
+    "M76 Little Dumbbell": (2_500, 1.7),
+    "M97 Owl Nebula": (2_030, 3.4),
+    "NGC 7000 North America": (1_800, 100),
+    "M3 Globular Cluster": (33_900, 180),
+    "M4 Globular Cluster": (7_200, 75),
+    "M5 Globular Cluster": (24_500, 165),
+    "M6 Butterfly Cluster": (1_600, 25),
+    "M7 Ptolemy Cluster": (980, 25),
+    "M11 Wild Duck Cluster": (6_200, 23),
+    "M13 Hercules Cluster": (22_200, 145),
+    "M15 Pegasus Cluster": (33_600, 175),
+    "M22 Sagittarius Cluster": (10_600, 70),
+    "M35 Open Cluster": (2_800, 30),
+    "M36 Open Cluster": (4_100, 14),
+    "M37 Open Cluster": (4_500, 25),
+    "M38 Open Cluster": (4_200, 25),
+    "M44 Beehive Cluster": (577, 15),
+    "M45 Pleiades": (444, 8),
+    "NGC 869 Double Cluster": (7_600, 70),
+}
+
+SOLAR_SYSTEM_PHYSICAL = {
+    "Sun":     {"diameter_km": 1_392_700,  "mass_kg": 1.989e30},
+    "Moon":    {"diameter_km": 3_474.8,    "mass_kg": 7.342e22},
+    "Mercury": {"diameter_km": 4_879,      "mass_kg": 3.3011e23},
+    "Venus":   {"diameter_km": 12_104,     "mass_kg": 4.8675e24},
+    "Mars":    {"diameter_km": 6_779,      "mass_kg": 6.4171e23},
+    "Jupiter": {"diameter_km": 139_820,    "mass_kg": 1.8982e27},
+    "Saturn":  {"diameter_km": 116_460,    "mass_kg": 5.6834e26},
+    "Uranus":  {"diameter_km": 50_724,     "mass_kg": 8.6810e25},
+    "Neptune": {"diameter_km": 49_244,     "mass_kg": 1.02413e26},
+}
+
+LY_KM = 9.4607e12
+SUN_RADIUS_KM = 696_340.0
+SUN_MASS_KG = 1.989e30

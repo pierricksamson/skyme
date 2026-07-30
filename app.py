@@ -1215,6 +1215,120 @@ def catalog_stats():
         "deep_sky_total": len(DEEP_SKY),
     })
 
+import math as _math
+
+def _object_category(name):
+    if name == "Sun":
+        return "sun"
+    if name == "Moon":
+        return "moon"
+    if name in PLANET_BODY_NAME:
+        return "planet"
+    for s_name, *_rest in STARS:
+        if s_name == name:
+            return "star"
+    for d_name, _ra, _dec, _mag, kind in DEEP_SKY:
+        if d_name == name:
+            return kind
+    return None
+
+
+def _sphere_volume_km3(diameter_km):
+    if diameter_km is None:
+        return None
+    r = diameter_km / 2.0
+    return (4.0 / 3.0) * _math.pi * r ** 3
+
+
+def get_physical_info(name):
+    from catalog import (
+        SOLAR_SYSTEM_PHYSICAL, STAR_PHYSICAL, STAR_DISTANCE_LY,
+        DEEP_SKY_INFO, SUN_RADIUS_KM, SUN_MASS_KG, LY_KM,
+    )
+    info = {"distance_ly": None, "diameter_km": None, "mass_kg": None, "volume_km3": None}
+
+    if name in SOLAR_SYSTEM_PHYSICAL:
+        d = SOLAR_SYSTEM_PHYSICAL[name]
+        info["diameter_km"] = d["diameter_km"]
+        info["mass_kg"] = d["mass_kg"]
+        info["volume_km3"] = _sphere_volume_km3(d["diameter_km"])
+        return info
+
+    if name in STAR_PHYSICAL:
+        radius_solar, mass_solar = STAR_PHYSICAL[name]
+        diameter_km = 2 * radius_solar * SUN_RADIUS_KM
+        info["distance_ly"] = STAR_DISTANCE_LY.get(name)
+        info["diameter_km"] = diameter_km
+        info["mass_kg"] = mass_solar * SUN_MASS_KG
+        info["volume_km3"] = _sphere_volume_km3(diameter_km)
+        return info
+
+    if name in DEEP_SKY_INFO:
+        distance_ly, size_ly = DEEP_SKY_INFO[name]
+        info["distance_ly"] = distance_ly
+        info["diameter_km"] = size_ly * LY_KM
+        return info
+
+    return info
+
+
+@app.route("/api/object/details")
+@login_required
+def object_details():
+    """Position instantanée (azimut/élévation/AD/déclinaison) + données
+    physiques approximatives (distance, diamètre, masse, volume) pour la
+    popup info. Azimut/élévation ne sont renvoyés que si aucune `date` n'est
+    fournie (sinon ils n'auraient pas de sens pour une nuit future)."""
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+
+    factory, _min_alt_override = _object_factory_and_min_alt(name)
+    if factory is None:
+        return jsonify({"error": "unknown object"}), 404
+
+    try:
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
+    except (KeyError, ValueError):
+        return jsonify({"error": "lat/lon required"}), 400
+    elev = float(request.args.get("elev", 0) or 0)
+    location = EarthLocation(lat=lat * u.deg, lon=lon * u.deg, height=max(elev, 0) * u.m)
+
+    date_str = request.args.get("date")
+    is_now = not date_str
+    if date_str:
+        try:
+            now_utc = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return jsonify({"error": "date must be formatted YYYY-MM-DD"}), 400
+    else:
+        now_utc = datetime.now(timezone.utc)
+    t = Time(now_utc)
+
+    coord = factory(t, location)
+    icrs = coord.icrs
+    altaz = coord.transform_to(AltAz(obstime=t, location=location))
+
+    category = _object_category(name)
+    physical = get_physical_info(name)
+
+    distance_km = None
+    if category in ("sun", "moon", "planet"):
+        try:
+            distance_km = float(coord.distance.to(u.km).value)
+        except Exception:
+            distance_km = None
+
+    return jsonify({
+        "ra_hours": round(float(icrs.ra.hour), 3),
+        "dec_deg": round(float(icrs.dec.deg), 2),
+        "azimuth_deg": round(float(altaz.az.deg), 1),
+        "altitude_deg": round(float(altaz.alt.deg), 1),
+        "is_now": is_now,
+        "distance_km": round(distance_km) if distance_km is not None else None,
+        **physical,
+    })
 
 if __name__ == "__main__":
     app.run(

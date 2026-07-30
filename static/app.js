@@ -978,6 +978,103 @@ function refreshSharedFilterViews() {
   // plan prévu à l'avance (date, et éventuellement lieu manuel, différents
   // d'aujourd'hui). Les champs non fournis retombent sur "maintenant" /
   // le lieu courant de l'app.
+  async function fetchObjectDetails(o, ctx) {
+  const lat = (ctx && ctx.lat !== undefined && ctx.lat !== null) ? ctx.lat : currentLat;
+  const lon = (ctx && ctx.lon !== undefined && ctx.lon !== null) ? ctx.lon : currentLon;
+  const elev = (ctx && ctx.elev !== undefined && ctx.elev !== null) ? ctx.elev : currentElev;
+  if (lat === null || lon === null) return null;
+  try {
+    let url = `/api/object/details?name=${encodeURIComponent(o.name)}&lat=${lat}&lon=${lon}&elev=${elev}`;
+    if (ctx && ctx.dateStr) url += `&date=${ctx.dateStr}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+function formatRAHours(h) {
+  if (h === null || h === undefined) return '—';
+  const totalSec = h * 3600;
+  const hh = Math.floor(totalSec / 3600);
+  const mm = Math.floor((totalSec % 3600) / 60);
+  return `${hh}h${String(mm).padStart(2, '0')}m`;
+}
+
+function formatDecDeg(d) {
+  if (d === null || d === undefined) return '—';
+  const sign = d < 0 ? '-' : '+';
+  const abs = Math.abs(d);
+  const deg = Math.floor(abs);
+  const min = Math.round((abs - deg) * 60);
+  return `${sign}${deg}°${String(min).padStart(2, '0')}′`;
+}
+
+function formatDistance(data) {
+  if (data.distance_km !== null && data.distance_km !== undefined) {
+    return data.distance_km > 1e6
+      ? `${(data.distance_km / 1e6).toFixed(2)} M km`
+      : `${Math.round(data.distance_km).toLocaleString('fr-FR')} km`;
+  }
+  if (data.distance_ly !== null && data.distance_ly !== undefined) {
+    if (data.distance_ly >= 1e6) return `${(data.distance_ly / 1e6).toFixed(2)} M al`;
+    if (data.distance_ly >= 1e3) return `${(data.distance_ly / 1e3).toFixed(1)} k al`;
+    return `${data.distance_ly.toFixed(1)} al`;
+  }
+  return '—';
+}
+
+function formatDiameter(km) {
+  if (km === null || km === undefined) return '—';
+  if (km >= 9.4607e12) return `${(km / 9.4607e12).toFixed(2)} al`;
+  if (km >= 1e6) return `${(km / 1e6).toFixed(2)} M km`;
+  return `${Math.round(km).toLocaleString('fr-FR')} km`;
+}
+
+function formatSci(value, unit) {
+  if (value === null || value === undefined) return '—';
+  const exp = Math.floor(Math.log10(value));
+  const mantissa = value / Math.pow(10, exp);
+  return `${mantissa.toFixed(2)} × 10^${exp} ${unit}`;
+}
+
+function renderInfoDetails(data) {
+  const azEl = document.getElementById('infoLiveCoords');
+  const azV = document.getElementById('infoAzimuth');
+  const elV = document.getElementById('infoElevation');
+  const raV = document.getElementById('infoRA');
+  const decV = document.getElementById('infoDec');
+  const distV = document.getElementById('infoDistance');
+  const diamV = document.getElementById('infoDiameter');
+  const massV = document.getElementById('infoMass');
+  const volV = document.getElementById('infoVolume');
+  if (!raV) return;
+
+  if (!data) {
+    [azV, elV, raV, decV, distV, diamV, massV, volV].forEach((el) => { if (el) el.textContent = '—'; });
+    if (azEl) azEl.classList.add('hidden');
+    return;
+  }
+
+  if (data.is_now && data.azimuth_deg !== null && data.azimuth_deg !== undefined) {
+    const heading = ((data.azimuth_deg % 360) + 360) % 360;
+    azV.textContent = `${Math.round(data.azimuth_deg)}° ${headingLabel(heading)}`;
+    elV.textContent = `${Math.round(data.altitude_deg)}°`;
+    if (azEl) azEl.classList.remove('hidden');
+  } else if (azEl) {
+    azEl.classList.add('hidden');
+  }
+
+  raV.textContent = formatRAHours(data.ra_hours);
+  decV.textContent = formatDecDeg(data.dec_deg);
+  distV.textContent = formatDistance(data);
+  diamV.textContent = formatDiameter(data.diameter_km);
+  massV.textContent = formatSci(data.mass_kg, 'kg');
+  volV.textContent = formatSci(data.volume_km3, 'km³');
+}
+
+
   async function fetchPhaseInfo(o, ctx) {
   try {
     let url = `/api/phase?name=${encodeURIComponent(o.name)}`;
@@ -1182,7 +1279,11 @@ function renderInfoPhase(data) {
       if (infoObj && infoObj.name === wikiRequestName) renderInfoWiki(data, wikiRequestName);
     });
 
-    
+    renderInfoDetails(null);
+    const detailsRequestName = o.name;
+    fetchObjectDetails(o, ctx).then((data) => {
+      if (infoObj && infoObj.name === detailsRequestName) renderInfoDetails(data);
+    });
 
     const infoPhaseEl = document.getElementById('infoPhase');
     if (infoPhaseEl) infoPhaseEl.classList.add('hidden');
