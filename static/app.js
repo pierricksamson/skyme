@@ -4354,9 +4354,10 @@ document.addEventListener('click', (e) => {
 
     const gmstHours = computeGMSTHours(new Date());
     const lstHours = ((gmstHours + lon / 15) % 24 + 24) % 24;
-    let hourAngle = lstHours - POLARIS_RA_HOURS; // hours
+    let hourAngle = lstHours - POLARIS_RA_HOURS; // hours (0..24)
     hourAngle = ((hourAngle % 24) + 24) % 24;
-    const angleDeg = hourAngle * 15; // 0..360, 0 = Polaris due "up" from pole at HA=0
+    const hourAngle12 = hourAngle % 12; // cadran 12h : Polaris fait 2 tours par jour sidéral
+    const angleDeg = hourAngle12 * 30; // 0..360, 30°/heure sur un cadran de 12h
 
     // Convention: HA=0 -> Polaris at top (12 o'clock) as seen looking at the pole,
     // increasing HA rotates clockwise.
@@ -4369,11 +4370,11 @@ document.addEventListener('click', (e) => {
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--hairline)" stroke-width="1"/>
     `;
 
-    // Graduations : petites toutes les heures, moyennes tous les 3h, grandes tous les 6h
-    for (let h = 0; h < 24; h++) {
-      const a = (h * 15 - 90) * Math.PI / 180;
-      const isMajor = h % 6 === 0;
-      const isMedium = !isMajor && h % 2 === 0; // tiers du secteur de 6h : 2h, 4h, 8h, 10h...
+    // Graduations : petites toutes les heures, moyennes toutes les 3h, grandes toutes les 6h (cadran 12h)
+    for (let h = 0; h < 12; h++) {
+      const a = (h * 30 - 90) * Math.PI / 180;
+      const isMajor = h % 6 === 0; // 12h et 6h
+      const isMedium = !isMajor && h % 3 === 0; // 3h et 9h
       const tickLen = isMajor ? 10 : (isMedium ? 7 : 4);
       const tickWidth = isMajor ? 1.6 : (isMedium ? 1.2 : 0.8);
       const x1 = cx + r * Math.cos(a);
@@ -4390,15 +4391,15 @@ document.addEventListener('click', (e) => {
       <line x1="${cx}" y1="${cy}" x2="${px}" y2="${py}" stroke="var(--accent)" stroke-width="1.5"/>
       <circle cx="${px}" cy="${py}" r="5" fill="var(--accent)" style="filter: drop-shadow(0 0 4px rgba(212,175,106,0.8));"/>
     `;
-    ['0','6','12','18'].forEach((h) => {
-      const a = (Number(h) * 15 - 90) * Math.PI / 180;
+    ['12','3','6','9'].forEach((h) => {
+      const a = (Number(h) * 30 - 90) * Math.PI / 180;
       const lx = cx + (r + 12) * Math.cos(a);
       const ly = cy + (r + 12) * Math.sin(a);
       svgMarkup += `<text x="${lx}" y="${ly}" fill="var(--text-muted)" font-size="9" font-family="var(--font-mono)" text-anchor="middle" dominant-baseline="middle">${h}h</text>`;
     });
     svg.innerHTML = svgMarkup;
 
-    readout.textContent = `HA ${hourAngle.toFixed(2)}h · LST ${lstHours.toFixed(2)}h`;
+    readout.textContent = `HA ${hourAngle12.toFixed(2)}h (12h) · LST ${lstHours.toFixed(2)}h`;
   }
 
   function startPolarClock() {
