@@ -35,6 +35,12 @@ STARS = [
     ("Mirfak",      3.4054,   49.8612,  1.79),
     ("Alphard",     9.4597,   -8.6653,  1.98),
     ("Hamal",       2.1206,   23.4624,  2.01),
+
+    # Extended stars
+    ("Albireo",     19.5120,  27.9590,  3.05),
+    ("Alnilam",      5.6030,  -1.2010,  1.69),
+    ("Mintaka",      5.5330,  -0.2980,  2.20),
+    ("Thuban",      14.0730,  64.3750,  3.65),
 ]
 
 # name, ra_hours, dec_deg, mag, type (galaxy | nebula | cluster)
@@ -50,6 +56,10 @@ DEEP_SKY = [
     ("M101 Pinwheel Galaxy",  14.0533,  54.3489, 7.86, "galaxy"),
     ("M87 Virgo A",           12.5136,  12.3911, 8.60, "galaxy"),
     ("M74 Phantom Galaxy",     1.6114,  15.7836, 9.40, "galaxy"),
+    # Extended Galaxies
+    ("M106 Galaxy",           12.3158,  47.3039, 8.40, "galaxy"),
+    ("NGC 253 Sculptor Galaxy",0.7925, -25.2881, 8.00, "galaxy"),
+    ("Centaurus A",           13.4242, -43.0189, 6.84, "galaxy"),
 
     # --- NEBULAE ---
     ("M1 Crab Nebula",         5.5755,  22.0145, 8.40, "nebula"),
@@ -64,6 +74,11 @@ DEEP_SKY = [
     ("M76 Little Dumbbell",    1.7061,  51.5753, 10.1, "nebula"),
     ("M97 Owl Nebula",        11.2467,  55.0192, 9.90, "nebula"),
     ("NGC 7000 North America",20.9808,  44.3500, 7.00, "nebula"),
+    # Extended Nebulae
+    ("NGC 7293 Helix Nebula", 22.4944, -20.8370, 7.60, "nebula"),
+    ("NGC 2237 Rosette Nebula",6.5625,   4.9983, 9.00, "nebula"),
+    ("NGC 2070 Tarantula Nebula",5.6450,-69.1008,8.00, "nebula"),
+    ("NGC 6960 Veil Nebula",  20.7606,  30.7083, 7.00, "nebula"),
 
     # --- CLUSTERS ---
     ("M3 Globular Cluster",   13.7036,  28.3769, 6.20, "cluster"),
@@ -82,6 +97,11 @@ DEEP_SKY = [
     ("M44 Beehive Cluster",    8.6725,  19.6700, 3.70, "cluster"),
     ("M45 Pleiades",           3.7912,  24.1053, 1.60, "cluster"),
     ("NGC 869 Double Cluster", 2.3183,  57.1333, 5.30, "cluster"),
+    # Extended Clusters
+    ("Melotte 25 Hyades",      4.4500,  15.8667, 0.50, "cluster"),
+    ("NGC 5139 Omega Centauri",13.4464, -47.4794, 3.90, "cluster"),
+    ("NGC 4755 Jewel Box",    12.8950, -60.3728, 4.20, "cluster"),
+    ("M2 Globular Cluster",   21.5575,  -0.8231, 6.50, "cluster"),
 ]
 
 PLANETS = {
@@ -113,6 +133,8 @@ STAR_DISTANCE_LY = {
     "Bellatrix": 250, "Polaris": 433, "Algol": 90, "Almach": 350,
     "Mizar": 78, "Alnitak": 800, "Alioth": 81, "Dubhe": 123, "Diphda": 96,
     "Mirfak": 510, "Alphard": 177, "Hamal": 66,
+    # Extended
+    "Albireo": 430, "Alnilam": 2000, "Mintaka": 1200, "Thuban": 303,
 }
 
 # name -> (rayon en rayons solaires, masse en masses solaires)
@@ -127,6 +149,8 @@ STAR_PHYSICAL = {
     "Almach": (80, 15), "Mizar": (2.4, 2.2), "Alnitak": (20, 33),
     "Alioth": (4.14, 2.91), "Dubhe": (17.03, 4.25), "Diphda": (16.78, 2.8),
     "Mirfak": (68, 8.5), "Alphard": (50.5, 3.0), "Hamal": (14.9, 1.5),
+    # Extended
+    "Albireo": (69, 14.5), "Alnilam": (32, 34), "Mintaka": (16, 24), "Thuban": (3.4, 2.8),
 }
 
 # name -> (distance_ly, taille apparente linéaire en années-lumière)
@@ -169,6 +193,18 @@ DEEP_SKY_INFO = {
     "M44 Beehive Cluster": (577, 15),
     "M45 Pleiades": (444, 8),
     "NGC 869 Double Cluster": (7_600, 70),
+    # Extended
+    "M106 Galaxy": (23_700_000, 135_000),
+    "NGC 253 Sculptor Galaxy": (11_400_000, 90_000),
+    "Centaurus A": (12_000_000, 60_000),
+    "NGC 7293 Helix Nebula": (650, 2.8),
+    "NGC 2237 Rosette Nebula": (5_200, 130),
+    "NGC 2070 Tarantula Nebula": (160_000, 1_000),
+    "NGC 6960 Veil Nebula": (2_400, 130),
+    "Melotte 25 Hyades": (153, 20),
+    "NGC 5139 Omega Centauri": (15_800, 150),
+    "NGC 4755 Jewel Box": (6_440, 14),
+    "M2 Globular Cluster": (37_500, 175),
 }
 
 SOLAR_SYSTEM_PHYSICAL = {
