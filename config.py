@@ -33,7 +33,21 @@ DEFAULT_MIN_ALT = 10.0
 SUN_MIN_ALT = -0.83
 
 # Pas de temps (minutes) pour l'échantillonnage des trajectoires d'objets.
+# Conservé pour compat (find_night_window utilise encore une grille fine
+# sur le Soleil, calcul unique donc peu coûteux).
 STEP_MINUTES = 4
+
+# ---------- astro_fast : scan grossier "coarse-to-fine" ----------
+# Corps lents (Soleil, Lune, planètes, astéroïdes, comètes) : la courbe
+# d'altitude est très lisse, un pas large + spline cubique suffit très
+# largement à la précision cible (±1 min / ±0.1°).
+MOVING_COARSE_STEP_MIN = 30
+# Satellites : passages courts (qqs minutes), pas plus fin pour ne pas
+# rater un passage bref entre deux points du scan grossier.
+SATELLITE_COARSE_STEP_MIN = 3
+# Recherche étendue (jusqu'à plusieurs dizaines de jours, ex. Lune/planètes
+# hors de portée immédiate) : déclinaison variant lentement, pas très large.
+EXTENDED_COARSE_STEP_MIN = 180
 
 # Plage horaire par défaut : mode "margin" (marge en minutes autour du
 # coucher/lever du soleil) ou "fixed" (heures murales fixes).

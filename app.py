@@ -22,6 +22,7 @@ from astropy.coordinates import (
 import astropy.units as u
 import requests
 
+import astro_fast
 from catalog import STARS, DEEP_SKY, CATEGORY_COLOR
 from space_objects import (
     ASTEROIDS, COMETS, SATELLITE_NORAD_ID,
@@ -448,172 +449,78 @@ def _interp_time(t0, t1, v0, v1, target):
     return t0 + frac * (t1 - t0)
 
 
-def build_time_array(t_start, t_end, step_minutes=STEP_MINUTES):
-    total_min = (t_end - t_start).sec / 60.0
-    n = max(int(total_min / step_minutes) + 1, 2)
-    offsets = np.linspace(0, total_min, n)
-    return t_start + offsets * u.minute
-
-
-def find_visibility_window(alt_deg, min_alt=config.DEFAULT_MIN_ALT):
-    above = alt_deg > min_alt
-    if not np.any(above):
-        return None
-    idx = np.where(above)[0]
-    first, last = idx[0], idx[-1]
-    for i in range(first, last + 1):
-        if not above[i]:
-            last = i - 1
-            break
-    touches_start = (first == 0)
-    touches_end = (last == len(above) - 1)
-    return int(first), int(last), touches_start, touches_end
-
-
-def find_next_rise_far(coord_factory, location, t_ref, min_alt=config.DEFAULT_MIN_ALT,
-                        max_days=30, step_minutes=20):
-    """Pour un objet qui ne dépasse pas `min_alt` sur la fenêtre courte de
-    `find_rise_set_event` (quelques heures), élargit la recherche jusqu'à
-    `max_days` jours en avant. Utile pour la Lune et les planètes, dont la
-    déclinaison évolue au fil des jours/semaines et qui peuvent donc finir
-    par franchir `min_alt` même si ce n'est pas le cas dans l'immédiat.
-    Renvoie l'instant (Time) du prochain lever, ou None si aucun lever
-    n'est trouvé dans la fenêtre (objet réellement toujours sous le seuil,
-    typiquement une étoile fixe trop proche du pôle opposé)."""
-    minutes = np.arange(0, max_days * 24 * 60, step_minutes)
-    times = t_ref + minutes * u.minute
-    frame = AltAz(obstime=times, location=location)
-    coord = coord_factory(times, location)
-    alt_deg = coord.transform_to(frame).alt.deg
-    above = alt_deg > min_alt
-
-    if not np.any(above):
-        return None
-    idx = int(np.argmax(above))  # premier True
-    if idx == 0:
-        return times[0]
-    return _interp_time(times[idx - 1], times[idx], alt_deg[idx - 1], alt_deg[idx], min_alt)
+def _coarse_step_for(category):
+    """Pas du scan grossier (minutes) selon la catégorie : les satellites
+    ont des passages courts (qqs minutes) et gardent un pas fin ; les
+    autres corps mobiles (Soleil, Lune, planètes, astéroïdes, comètes)
+    ont une trajectoire lisse et tolèrent un pas large (cf. astro_fast)."""
+    return config.SATELLITE_COARSE_STEP_MIN if category == "satellite" \
+        else config.MOVING_COARSE_STEP_MIN
 
 
 def find_rise_set_event(coord_factory, location, t_ref, min_alt=config.DEFAULT_MIN_ALT,
-                         back_hours=15, fwd_hours=48, step_minutes=5,
-                         extended_days=None, extended_step_minutes=20):
-    """Locate the *real* rise/set pair for an object, unlimited by any
-    display window: the crossing-above/crossing-below of `min_alt` that
-    encloses `t_ref` (if the object is up right then) or the next upcoming
-    one otherwise. Handles circumpolar objects (always above min_alt) and
-    objects that never reach min_alt from this location.
-
-    Si `extended_days` est fourni et que l'objet ne dépasse `min_alt` sur
-    aucun point de la fenêtre courte, une recherche élargie (jusqu'à
-    `extended_days` jours) est tentée : si un lever futur est trouvé, il
-    est renvoyé dans "rise_iso" ("never_visible" reste à True, pour
-    indiquer qu'il n'y a pas de fenêtre lever/coucher "immédiate")."""
-    minutes = np.arange(-back_hours * 60, fwd_hours * 60, step_minutes)
-    times = t_ref + minutes * u.minute
-    frame = AltAz(obstime=times, location=location)
-    coord = coord_factory(times, location)
-    alt_deg = coord.transform_to(frame).alt.deg
-    above = alt_deg > min_alt
-
-    if np.all(above):
-        return {"rise_iso": None, "set_iso": None,
-                "always_visible": True, "never_visible": False, "up_now": True}
-    if not np.any(above):
-        far_rise = None
-        if extended_days:
-            far_rise = find_next_rise_far(
-                coord_factory, location, t_ref, min_alt,
-                max_days=extended_days, step_minutes=extended_step_minutes)
-        return {
-            "rise_iso": (far_rise.utc.isot + "Z") if far_rise is not None else None,
-            "set_iso": None,
-            "always_visible": False, "never_visible": True, "up_now": False,
-        }
-
-    idx_now = int(np.argmin(np.abs(minutes)))
-    up_now = bool(above[idx_now])
-
-    n = len(above)
-    islands = []
-    i = 0
-    while i < n:
-        if above[i]:
-            j = i
-            while j + 1 < n and above[j + 1]:
-                j += 1
-            islands.append((i, j))
-            i = j + 1
-        else:
-            i += 1
-
-    chosen = None
-    if up_now:
-        for s, e in islands:
-            if s <= idx_now <= e:
-                chosen = (s, e)
-                break
-    else:
-        for s, e in islands:
-            if s > idx_now:
-                chosen = (s, e)
-                break
-        if chosen is None:
-            chosen = islands[-1]
-    s, e = chosen
-
-    rise_t = times[0] if s == 0 else _interp_time(
-        times[s - 1], times[s], alt_deg[s - 1], alt_deg[s], min_alt)
-    set_t = times[-1] if e == n - 1 else _interp_time(
-        times[e], times[e + 1], alt_deg[e], alt_deg[e + 1], min_alt)
-
-    return {
-        "rise_iso": rise_t.utc.isot + "Z",
-        "set_iso": set_t.utc.isot + "Z",
-        "always_visible": False,
-        "never_visible": False,
-        "up_now": up_now,
-    }
+                         extended_days=None, category=None):
+    """Vrai lever/coucher encadrant t_ref (ou le prochain), non limité par
+    une fenêtre d'affichage. Étoiles/ciel profond (RA/Dec fixes, marquées
+    via `coord_factory.fixed_radec`) : formule analytique exacte, O(1),
+    aucun échantillonnage. Corps mobiles : scan grossier + spline cubique
+    + recherche de racine (astro_fast.find_rise_set_event_fast)."""
+    fixed = getattr(coord_factory, "fixed_radec", None)
+    if fixed is not None:
+        ra_deg, dec_deg = fixed
+        return astro_fast.find_rise_set_analytic(ra_deg, dec_deg, location.lat.deg,
+                                                   location, t_ref, min_alt)
+    return astro_fast.find_rise_set_event_fast(
+        coord_factory, location, t_ref, min_alt,
+        coarse_step_minutes=_coarse_step_for(category),
+        extended_days=extended_days,
+        extended_step_minutes=config.EXTENDED_COARSE_STEP_MIN)
 
 
 def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
-                    t_list, frame_list, location, min_alt=config.DEFAULT_MIN_ALT, is_moon=False,
+                    location, min_alt=config.DEFAULT_MIN_ALT, is_moon=False,
                     is_favorite=False, is_planet=False, planet_body_key=None, mag_func=None):
-    coord = coord_factory(t_list, location)
-    altaz = coord.transform_to(frame_list)
-    alt_deg = altaz.alt.deg
+    """Étoiles/ciel profond : délègue à batch_fixed_rise_set (N=1) via
+    astro_fast, entièrement analytique. Corps mobiles : scan grossier +
+    spline cubique + brentq (astro_fast.find_visibility_window_fast),
+    remplaçant l'ancienne grille fine (STEP_MINUTES) sur toute la
+    fenêtre d'affichage."""
+    fixed = getattr(coord_factory, "fixed_radec", None)
+    if fixed is not None:
+        ra_deg, dec_deg = fixed
+        batch = astro_fast.batch_fixed_rise_set(
+            np.array([ra_deg]), np.array([dec_deg]), location.lat.deg,
+            location, t_start, t_end, min_alt)
+        if not bool(batch["visible"][0]):
+            return None
+        return astro_fast.build_fixed_result(
+            name, category, fixed_mag, CATEGORY_COLOR[category], batch, 0,
+            is_favorite=is_favorite)
 
-    result = find_visibility_window(alt_deg, min_alt)
-    if result is None:
+    coarse_step = _coarse_step_for(category)
+    win = astro_fast.find_visibility_window_fast(
+        coord_factory, location, t_start, t_end, min_alt,
+        coarse_step_minutes=coarse_step)
+    if win is None:
         return None
-    first, last, touches_start, touches_end = result
-
-    rise_t = t_start if touches_start else _interp_time(
-        t_list[first - 1], t_list[first], alt_deg[first - 1], alt_deg[first], min_alt)
-    set_t = t_end if touches_end else _interp_time(
-        t_list[last], t_list[last + 1], alt_deg[last], alt_deg[last + 1], min_alt)
-
-    window_alt = alt_deg[first:last + 1]
-    peak_alt = float(np.max(window_alt))
-    peak_idx = first + int(np.argmax(window_alt))
+    rise_t, set_t, peak_t = win["rise_t"], win["set_t"], win["peak_t"]
+    peak_alt = win["peak_alt"]
 
     mag = fixed_mag
     if is_moon:
-        mag = moon_magnitude(t_list[peak_idx], location)
+        mag = moon_magnitude(peak_t, location)
     elif is_planet and planet_body_key:
-        mag = compute_planet_magnitude(name, planet_body_key, t_list[peak_idx], location)
+        mag = compute_planet_magnitude(name, planet_body_key, peak_t, location)
     elif mag_func is not None:
         try:
-            mag = mag_func(t_list[peak_idx], location)
+            mag = mag_func(peak_t, location)
         except Exception:
             mag = fixed_mag
 
     duration_min = (set_t - rise_t).sec / 60.0
 
-    # Vrai lever/coucher, non limité par la fenêtre d'affichage (marge ou
-    # plage fixe) : on prend comme référence le pic d'altitude (l'objet y
-    # est garanti au-dessus du seuil), puis on cherche l'évènement complet.
-    true_event = find_rise_set_event(coord_factory, location, t_list[peak_idx], min_alt)
+    true_event = astro_fast.find_rise_set_event_fast(
+        coord_factory, location, peak_t, min_alt, coarse_step_minutes=coarse_step)
 
     return {
         "name": name,
@@ -624,8 +531,8 @@ def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
         "duration_min": round(duration_min),
         "peak_altitude": round(peak_alt, 1),
         "magnitude": round(mag, 2) if mag is not None else None,
-        "touches_start": bool(touches_start),
-        "touches_end": bool(touches_end),
+        "touches_start": bool(win["touches_start"]),
+        "touches_end": bool(win["touches_end"]),
         "favorite": bool(is_favorite),
         "true_rise_iso": true_event["rise_iso"],
         "true_set_iso": true_event["set_iso"],
@@ -633,6 +540,26 @@ def compute_object(coord_factory, name, category, fixed_mag, t_start, t_end,
         "never_visible": true_event["never_visible"],
         "up_now": true_event["up_now"],
     }
+
+
+def _batch_fixed_objects(catalog_rows, location, t_start, t_end, min_alt, favorites):
+    """Calcule d'un coup (un seul appel numpy vectorisé, aucun AltAz) le
+    lever/coucher/pic de TOUS les objets à RA/Dec fixes (étoiles + ciel
+    profond) fournis. `catalog_rows` : liste de (name, category, ra, dec, mag)."""
+    if not catalog_rows:
+        return []
+    ra = np.array([r[2] for r in catalog_rows])
+    dec = np.array([r[3] for r in catalog_rows])
+    batch = astro_fast.batch_fixed_rise_set(ra, dec, location.lat.deg, location,
+                                             t_start, t_end, min_alt)
+    out = []
+    for i, (name, category, _ra, _dec, mag) in enumerate(catalog_rows):
+        if not bool(batch["visible"][i]):
+            continue
+        out.append(astro_fast.build_fixed_result(
+            name, category, mag, CATEGORY_COLOR[category], batch, i,
+            is_favorite=(name in favorites)))
+    return out
 
 
 def assign_lanes(objects):
@@ -764,16 +691,13 @@ def sky():
             t_start = sunset_t
             t_end = sunrise_t
     
-    t_list = build_time_array(t_start, t_end)
-    frame_list = AltAz(obstime=t_list, location=location)
-
     favorites = set(get_favorites(request.user["id"]))
 
     objects = []
 
     moon_factory = lambda times, loc: get_body("moon", times, loc)
     obj = compute_object(moon_factory, "Moon", "moon", None, t_start, t_end,
-                          t_list, frame_list, location, is_moon=True, min_alt=min_alt,
+                          location, is_moon=True, min_alt=min_alt,
                           is_favorite=("Moon" in favorites))
     if obj:
         objects.append(obj)
@@ -781,26 +705,23 @@ def sky():
     for pname, body_key in PLANET_BODY_NAME.items():
         factory = (lambda times, loc, bk=body_key: get_body(bk, times, loc))
         obj = compute_object(factory, pname, "planet", PLANET_MAG[pname], t_start, t_end,
-                            t_list, frame_list, location, min_alt=min_alt,
+                            location, min_alt=min_alt,
                             is_favorite=(pname in favorites),
                             is_planet=True, planet_body_key=body_key)
 
         if obj: 
             objects.append(obj)
 
-    for name, ra, dec, mag in STARS:
-        fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-        factory = (lambda times, loc, c=fixed_coord: c)
-        obj = compute_object(factory, name, "star", mag, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt,
-                              is_favorite=(name in favorites))
-        if obj:
-            objects.append(obj)
+    # Étoiles + ciel profond : un unique appel vectorisé (numpy pur, aucun
+    # AltAz) au lieu d'une boucle avec échantillonnage par objet.
+    fixed_rows = [(name, "star", ra * 15.0, dec, mag) for name, ra, dec, mag in STARS]
+    fixed_rows += [(name, kind, ra * 15.0, dec, mag) for name, ra, dec, mag, kind in DEEP_SKY]
+    objects.extend(_batch_fixed_objects(fixed_rows, location, t_start, t_end, min_alt, favorites))
 
     for name in ASTEROIDS:
         factory = asteroid_factory(name)
         obj = compute_object(factory, name, "asteroid", None, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt,
+                              location, min_alt=min_alt,
                               is_favorite=(name in favorites),
                               mag_func=(lambda t, loc, n=name: asteroid_magnitude(n, t, loc)))
         if obj:
@@ -809,7 +730,7 @@ def sky():
     for name in COMETS:
         factory = comet_factory(name)
         obj = compute_object(factory, name, "comet", None, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt,
+                              location, min_alt=min_alt,
                               is_favorite=(name in favorites),
                               mag_func=(lambda t, loc, n=name: comet_magnitude(n, t, loc)))
         if obj:
@@ -822,18 +743,9 @@ def sky():
     for name, norad_id in SATELLITE_NORAD_ID.items():
         factory = satellite_factory(norad_id)
         obj = compute_object(factory, name, "satellite", None, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt,
+                              location, min_alt=min_alt,
                               is_favorite=(name in favorites),
                               mag_func=(lambda t, loc, n=name: satellite_magnitude(n, t, loc)))
-        if obj:
-            objects.append(obj)
-
-    for name, ra, dec, mag, kind in DEEP_SKY:
-        fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-        factory = (lambda times, loc, c=fixed_coord: c)
-        obj = compute_object(factory, name, kind, mag, t_start, t_end,
-                              t_list, frame_list, location, min_alt=min_alt,
-                              is_favorite=(name in favorites))
         if obj:
             objects.append(obj)
 
@@ -886,24 +798,28 @@ def catalog_list():
 
     for name, ra, dec, mag in STARS:
         fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+        factory = (lambda times, loc, c=fixed_coord: c)
+        factory.fixed_radec = (ra * 15.0, dec)  # ra catalogue en heures -> degrés
         items.append({
             "name": name,
             "category": "star",
             "magnitude": mag,
             "ra": round(ra, 4),
             "dec": round(dec, 4),
-            "_factory": (lambda times, loc, c=fixed_coord: c),
+            "_factory": factory,
         })
 
     for name, ra, dec, mag, kind in DEEP_SKY:
         fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
+        factory = (lambda times, loc, c=fixed_coord: c)
+        factory.fixed_radec = (ra * 15.0, dec)
         items.append({
             "name": name,
             "category": kind,
             "magnitude": mag,
             "ra": round(ra, 4),
             "dec": round(dec, 4),
-            "_factory": (lambda times, loc, c=fixed_coord: c),
+            "_factory": factory,
         })
 
     for name in ASTEROIDS:
@@ -964,7 +880,7 @@ def catalog_list():
         item["favorite"] = (item["name"] in favorites) if item.get("favorable", True) else False
         if location is not None:
             event = find_rise_set_event(factory, location, Time(now_utc), min_alt=item_min_alt,
-                                         extended_days=30)
+                                         extended_days=30, category=item["category"])
             item["rise_iso"] = event["rise_iso"]
             item["set_iso"] = event["set_iso"]
             item["always_visible"] = event["always_visible"]
@@ -1234,6 +1150,14 @@ def agenda_favorites_count():
     fav_planets = [p for p in PLANET_BODY_NAME.items() if p[0] in favorite_set]
     want_moon = "Moon" in favorite_set
 
+    # RA/Dec des favoris fixes précalculés une seule fois (constants sur
+    # les 60 jours) : le batch analytique par jour se réduit à un simple
+    # appel numpy vectorisé, sans aucune transformation AltAz.
+    fixed_names = [s[0] for s in fav_stars] + [d[0] for d in fav_deep_sky]
+    fixed_ra = np.array([s[1] * 15.0 for s in fav_stars] + [d[1] * 15.0 for d in fav_deep_sky])
+    fixed_dec = np.array([s[2] for s in fav_stars] + [d[2] for d in fav_deep_sky])
+    lat_deg = location.lat.deg
+
     counts = {}
     day = start_date
     while day <= end_date:
@@ -1257,37 +1181,24 @@ def agenda_favorites_count():
             if t_start >= t_end:
                 t_start, t_end = sunset_t, sunrise_t
 
-        t_list = build_time_array(t_start, t_end)
-        frame_list = AltAz(obstime=t_list, location=location)
-
         count = 0
 
         if want_moon:
             moon_factory = lambda times, loc: get_body("moon", times, loc)
             if compute_object(moon_factory, "Moon", "moon", None, t_start, t_end,
-                               t_list, frame_list, location, is_moon=True,
-                               min_alt=min_alt) is not None:
+                               location, is_moon=True, min_alt=min_alt) is not None:
                 count += 1
 
         for pname, body_key in fav_planets:
             factory = (lambda times, loc, bk=body_key: get_body(bk, times, loc))
             if compute_object(factory, pname, "planet", PLANET_MAG[pname], t_start, t_end,
-                               t_list, frame_list, location, min_alt=min_alt) is not None:
+                               location, min_alt=min_alt) is not None:
                 count += 1
 
-        for name, ra, dec, mag in fav_stars:
-            fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-            factory = (lambda times, loc, c=fixed_coord: c)
-            if compute_object(factory, name, "star", mag, t_start, t_end,
-                               t_list, frame_list, location, min_alt=min_alt) is not None:
-                count += 1
-
-        for name, ra, dec, mag, kind in fav_deep_sky:
-            fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-            factory = (lambda times, loc, c=fixed_coord: c)
-            if compute_object(factory, name, kind, mag, t_start, t_end,
-                               t_list, frame_list, location, min_alt=min_alt) is not None:
-                count += 1
+        if fixed_names:
+            batch = astro_fast.batch_fixed_rise_set(fixed_ra, fixed_dec, lat_deg, location,
+                                                      t_start, t_end, min_alt)
+            count += int(np.count_nonzero(batch["visible"]))
 
         if count > 0:
             counts[date_str] = count
@@ -1347,11 +1258,15 @@ def _object_factory_and_min_alt(name):
     for s_name, ra, dec, mag in STARS:
         if s_name == name:
             fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-            return (lambda times, loc, c=fixed_coord: c), None
+            factory = (lambda times, loc, c=fixed_coord: c)
+            factory.fixed_radec = (ra * 15.0, dec)
+            return factory, None
     for d_name, ra, dec, mag, kind in DEEP_SKY:
         if d_name == name:
             fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
-            return (lambda times, loc, c=fixed_coord: c), None
+            factory = (lambda times, loc, c=fixed_coord: c)
+            factory.fixed_radec = (ra * 15.0, dec)
+            return factory, None
     if name in ASTEROIDS:
         return asteroid_factory(name), None
     if name in COMETS:
@@ -1402,7 +1317,9 @@ def object_next_event():
     # prochain lever, pas celui qui vient de se terminer.
     t_ref = Time(after_dt) + 2 * u.minute
 
-    event = find_rise_set_event(factory, location, t_ref, min_alt=min_alt, extended_days=30)
+    category = "satellite" if name in SATELLITE_NORAD_ID else None
+    event = find_rise_set_event(factory, location, t_ref, min_alt=min_alt, extended_days=30,
+                                 category=category)
     return jsonify(event)
 
 @app.route("/api/journal/<int:entry_id>", methods=["DELETE"])
