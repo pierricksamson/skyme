@@ -105,13 +105,35 @@ WIKI_TITLE_OVERRIDES = {
     "Azha": "Eta Eridani",
     "Ain": "Epsilon Tauri",
     "Mercury": "Mercury (planet)",
+
+    # --- Noms d'étoiles dont la page Wikipedia brute est soit une
+    # désambiguïsation non taguée comme telle par l'API REST, soit une page
+    # sans rapport (ville, objet du quotidien...). Identifiés dans
+    # wiki_cache.json : image/description null ou description du style
+    # "X may refer to:". Override direct plutôt que suffixe " (star)" car
+    # ce dernier ne mène pas toujours à la bonne page.
+    "Merak": "Merak (star)",
+    "Sadr": "Sadr (star)",
+    "Naos": "Naos (star)",
+    "Izar": "Izar (star)",
+    "Wasat": "Wasat (star)",
+    "Atria": "Atria (star)",
+    "Castor": "Castor (star)",
+    "Pollux": "Pollux (star)",
+    "Chara": "Chara (star)",
+    "Asterion": "Cor Caroli",       # doublon de coordonnées avec Cor Caroli
+    "Al Nath": "Elnath",
+    "Gienah": "Gamma Corvi",
+    "Kraz": "Beta Corvi",
+    "Turais": "Iota Carinae",
+    "Han": "Zeta Ophiuchi",
+    "Kuma": "Nu Draconis",
+    "Talitha": "Iota Ursae Majoris",
+    "Markab": "Alpha Pegasi",
+    "Alnair": "Alpha Gruis",
+    "Merga": "38 Boötis",
 }
 
-# Suffixes désambiguïsateurs Wikipedia à essayer AVANT le nom brut pour ces
-# catégories : contrairement aux pages de désambiguïsation (détectables via
-# l'API), un nom d'étoile comme "Ain" a une page Wikipedia "légitime" mais
-# sans rapport (le département français de l'Ain) — impossible à détecter
-# après coup, donc on privilégie le suffixe dès le départ pour ces types.
 _WIKI_CATEGORY_SUFFIX = {"star": " (star)", "planet": " (planet)"}
 
 _WIKI_GENERIC_SUFFIXES = {
@@ -121,6 +143,11 @@ _WIKI_GENERIC_SUFFIXES = {
 
 _WIKI_LEADING_CATALOG_RE = re.compile(r"^(M|NGC|IC)\s*(\d+)\s*(.*)$")
 _WIKI_TRAILING_CATALOG_RE = re.compile(r"^(.*?)\s+(NGC|IC|M)\s*(\d+)$")
+
+# Détecte les pages "X may refer to:" / "X refers to:" que l'API REST ne
+# tague pas toujours avec type == "disambiguation" (cas fréquent pour les
+# noms d'étoiles qui sont aussi des noms de lieux/objets courants).
+_DISAMBIG_TEXT_RE = re.compile(r"^.{0,60}?\b(may refer to|refers to)\b", re.I)
 
 
 def _wiki_title_candidates(name, category=None):
@@ -171,6 +198,18 @@ def _wiki_title_candidates(name, category=None):
     return out
 
 
+def _looks_like_disambiguation(api_data, description):
+    """L'API REST de Wikipedia tague type == 'disambiguation' pour les vraies
+    pages de désambiguïsation, mais certaines pages "X may refer to:" (noms
+    d'étoiles homonymes de lieux/objets) ne sont pas taguées ainsi. On
+    complète donc par une détection textuelle du même motif."""
+    if api_data.get("type") == "disambiguation":
+        return True
+    if description and _DISAMBIG_TEXT_RE.match(description):
+        return True
+    return False
+
+
 def _fetch_wiki_page(title):
     """Interroge l'API REST Wikipedia pour un titre de page donné. Renvoie
     toujours un dict {'image', 'description'} (valeurs à None si absentes
@@ -186,12 +225,13 @@ def _fetch_wiki_page(title):
         )
         if resp.ok:
             data = resp.json()
-            if data.get("type") == "disambiguation":
+            description = data.get("extract")
+            if _looks_like_disambiguation(data, description):
                 return result
             thumb = data.get("thumbnail") or data.get("originalimage")
             if thumb:
                 result["image"] = thumb.get("source")
-            result["description"] = data.get("extract")
+            result["description"] = description
     except requests.RequestException:
         pass
     return result
