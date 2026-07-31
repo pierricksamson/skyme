@@ -569,6 +569,10 @@ STAR_DISTANCE_LY = {
     "Mirfak": 510, "Alphard": 177, "Hamal": 66,
     # Extended
     "Albireo": 430, "Alnilam": 2000, "Mintaka": 1200, "Thuban": 303,
+    # New additions
+    "Adhara": 430, "Shaula": 570, "Wezen": 1600, "Alkaid": 104, "Sargas": 272,
+    "Avior": 600, "Menkalinan": 81, "Atria": 415, "Alhena": 109, "Peacock": 183,
+    "Alphecca": 75, "Sadr": 1800, "Eltanin": 154, "Schedar": 228,
 }
 
 # name -> (rayon en rayons solaires, masse en masses solaires)
@@ -585,6 +589,11 @@ STAR_PHYSICAL = {
     "Mirfak": (68, 8.5), "Alphard": (50.5, 3.0), "Hamal": (14.9, 1.5),
     # Extended
     "Albireo": (69, 14.5), "Alnilam": (32, 34), "Mintaka": (16, 24), "Thuban": (3.4, 2.8),
+    # New additions
+    "Adhara": (13.9, 12.6), "Shaula": (9.0, 14.5), "Wezen": (215, 16.9), "Alkaid": (3.4, 6.1), 
+    "Sargas": (26, 5.1), "Avior": (153, 9), "Menkalinan": (2.6, 2.4), "Atria": (130, 7), 
+    "Alhena": (3.3, 2.8), "Peacock": (4.8, 5.9), "Alphecca": (3.0, 2.6), "Sadr": (150, 12),
+    "Eltanin": (48, 1.7), "Schedar": (42, 2.8),
 }
 
 # name -> (distance_ly, taille apparente linéaire en années-lumière)
@@ -639,6 +648,25 @@ DEEP_SKY_INFO = {
     "NGC 5139 Omega Centauri": (15_800, 150),
     "NGC 4755 Jewel Box": (6_440, 14),
     "M2 Globular Cluster": (37_500, 175),
+    # New additions (Galaxies)
+    "M49": (55_900_000, 157_000),
+    "M58": (62_000_000, 107_000),
+    "M59": (60_000_000, 90_000),
+    "M60": (55_000_000, 120_000),
+    "M61": (52_500_000, 100_000),
+    "M65": (35_000_000, 90_000),
+    "M66": (36_000_000, 95_000),
+    "M83": (14_700_000, 55_000),
+    "M84": (60_000_000, 105_000),
+    "M86": (52_000_000, 135_000),
+    # New additions (Nebulae & Clusters)
+    "M78": (1_600, 10),
+    "NGC 281 Pacman Nebula": (9_200, 48),
+    "NGC 1499 California Nebula": (1_000, 60),
+    "IC 434 Horsehead Nebula": (1_500, 7),
+    "M9": (25_800, 90),
+    "M10": (14_300, 83),
+    "M12": (15_700, 75),
 }
 
 SOLAR_SYSTEM_PHYSICAL = {
