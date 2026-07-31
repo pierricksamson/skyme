@@ -1496,8 +1496,15 @@ function renderInfoPhase(data) {
     } else if (name === 'journal') {
       renderJournalList();
     }  else if (name === 'plan') {
+      // Si un jour était déjà ouvert dans l'éditeur avant de quitter la vue
+      // Prévoir, on le rouvre au lieu de revenir à la liste de toutes les
+      // soirées (bug de reset de la vue).
+      if (planInitialized && planSubView === 'editor') {
+        showPlanEditorView(planCurrentDate);
+      } else {
+        showPlanListView();
+      }
       planInitialized = true;
-      showPlanListView();
     } 
     if (name !== 'tools') {
       stopActiveTool();
@@ -2986,6 +2993,9 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   let planCatalogSearch = '';
   let planDatesWithPlan = {}; // { 'YYYY-MM-DD': nombre d'objets prévus }
   let planInitialized = false;
+  let planSubView = 'list'; // 'list' ou 'editor' : sous-vue actuellement affichée dans Prévoir,
+                             // mémorisée pour ne pas revenir à la liste quand on quitte puis
+                             // revient sur l'onglet Prévoir alors qu'un jour était ouvert.
   let planListData = []; // dernière liste chargée depuis /api/plans
   let planCurrentSettings = null; // paramètres (lieu/horaire/alt min) du plan ouvert dans l'éditeur
   let planParamsMode = 'edit'; // 'create' (nouveau plan) ou 'edit' (plan déjà ouvert)
@@ -3022,6 +3032,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     if (listView) listView.classList.remove('hidden');
     if (mainView) mainView.classList.add('hidden');
     if (planCountdownTimer) { clearInterval(planCountdownTimer); planCountdownTimer = null; }
+    planSubView = 'list';
     loadPlanList();
   }
 
@@ -3030,6 +3041,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     const mainView = document.getElementById('planMainView');
     if (listView) listView.classList.add('hidden');
     if (mainView) mainView.classList.remove('hidden');
+    planSubView = 'editor';
     loadPlan(dateStr);
   }
 
