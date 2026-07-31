@@ -667,8 +667,8 @@ def sky():
         if obj:
             objects.append(obj)
 
-    for name, elements in ASTEROIDS.items():
-        factory = asteroid_factory(elements)
+    for name in ASTEROIDS:
+        factory = asteroid_factory(name)
         obj = compute_object(factory, name, "asteroid", None, t_start, t_end,
                               t_list, frame_list, location, min_alt=min_alt,
                               is_favorite=(name in favorites),
@@ -676,8 +676,8 @@ def sky():
         if obj:
             objects.append(obj)
 
-    for name, elements in COMETS.items():
-        factory = comet_factory(elements)
+    for name in COMETS:
+        factory = comet_factory(name)
         obj = compute_object(factory, name, "comet", None, t_start, t_end,
                               t_list, frame_list, location, min_alt=min_alt,
                               is_favorite=(name in favorites),
@@ -776,24 +776,24 @@ def catalog_list():
             "_factory": (lambda times, loc, c=fixed_coord: c),
         })
 
-    for name, elements in ASTEROIDS.items():
+    for name in ASTEROIDS:
         items.append({
             "name": name,
             "category": "asteroid",
             "magnitude": None,
             "ra": None,
             "dec": None,
-            "_factory": asteroid_factory(elements),
+            "_factory": asteroid_factory(name),
         })
 
-    for name, elements in COMETS.items():
+    for name in COMETS:
         items.append({
             "name": name,
             "category": "comet",
             "magnitude": None,
             "ra": None,
             "dec": None,
-            "_factory": comet_factory(elements),
+            "_factory": comet_factory(name),
         })
 
     for name, norad_id in SATELLITE_NORAD_ID.items():
@@ -1223,9 +1223,9 @@ def _object_factory_and_min_alt(name):
             fixed_coord = SkyCoord(ra=ra * u.hourangle, dec=dec * u.deg, frame="icrs")
             return (lambda times, loc, c=fixed_coord: c), None
     if name in ASTEROIDS:
-        return asteroid_factory(ASTEROIDS[name]), None
+        return asteroid_factory(name), None
     if name in COMETS:
-        return comet_factory(COMETS[name]), None
+        return comet_factory(name), None
     if name in SATELLITE_NORAD_ID:
         return satellite_factory(SATELLITE_NORAD_ID[name]), None
     return None, None

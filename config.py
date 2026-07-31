@@ -9,6 +9,19 @@ ici, pas ailleurs.
 
 v ='v0.6'
 
+# ---------- Rafraîchissement automatique des données orbitales ----------
+
+# Éléments orbitaux des astéroïdes/comètes (JPL Horizons) : durée de vie du
+# cache disque avant nouvelle requête réseau. Ces éléments dérivent lentement
+# (perturbations planétaires, forces non-gravitationnelles pour les comètes)
+# donc un rafraîchissement quotidien suffit largement à rester précis.
+ORBITAL_ELEMENTS_TTL_SEC = 24 * 3600
+
+# TLE des satellites (Celestrak) : durée de vie du cache disque. Un TLE se
+# périme beaucoup plus vite (l'ISS corrige régulièrement son orbite), d'où
+# un rafraîchissement plus fréquent.
+TLE_CACHE_TTL_SEC = 6 * 3600
+
 # ---------- Calcul du ciel (timeline / agenda / plans) ----------
 
 # Hauteur minimale (degrés) au-dessus de l'horizon pour qu'un objet soit

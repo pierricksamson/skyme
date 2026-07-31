@@ -6,12 +6,15 @@ Contrairement aux planètes (éphéméride intégrée à Astropy) et aux étoile
 objets du ciel profond (position fixe), ces objets nécessitent :
 
   - astéroïdes/comètes : propagation kepleriennne à 2 corps (Soleil +
-    petit corps) à partir d'éléments orbitaux. 100% hors-ligne et rapide,
-    mais dérive lentement dans le temps (les éléments réels évoluent sous
-    l'effet des perturbations planétaires / forces non-gravitationnelles
-    pour les comètes) : les éléments ci-dessous sont indicatifs et
-    gagneraient à être rafraîchis de temps en temps depuis une source de
-    référence (Minor Planet Center, JPL Horizons).
+    petit corps) à partir d'éléments orbitaux osculateurs récupérés
+    automatiquement depuis l'API JPL Horizons (avec un cache disque
+    rafraîchi une fois par jour, cf. config.ORBITAL_ELEMENTS_TTL_SEC) et
+    ne retombe sur les valeurs figées ci-dessous que si le réseau est
+    indisponible. Les éléments réels évoluent lentement dans le temps
+    (perturbations planétaires / forces non-gravitationnelles pour les
+    comètes) : comme les éléments récupérés sont recalés chaque jour à
+    l'époque courante, la propagation képlerienne à 2 corps reste très
+    précise sur les quelques jours qui suivent.
 
   - satellites/objets artificiels : propagation SGP4 à partir d'un jeu
     d'éléments orbitaux (TLE). Un TLE devient imprécis après quelques
@@ -32,6 +35,8 @@ from astropy.coordinates import (
     SkyCoord, CartesianRepresentation, TEME, ITRS, AltAz,
     get_body_barycentric,
 )
+
+import config
 
 # Constante gravitationnelle de Gauss (k) : n (rad/jour) = k * a^(-3/2)
 # pour un corps de masse négligeable en orbite héliocentrique (a en UA).
@@ -102,6 +107,160 @@ COMET_PHYSICAL = {
 }
 
 # ---------------------------------------------------------------------------
+# Rafraîchissement automatique des éléments orbitaux (JPL Horizons)
+#
+# Le "COMMAND" Horizons identifie l'objet (numéro d'astéroïde ou désignation
+# de comète suivi de ";" pour forcer une recherche "petit corps" plutôt
+# qu'un corps majeur). On demande les éléments osculateurs ("ELEMENTS")
+# héliocentriques à l'époque courante : ils sont donc automatiquement
+# recalés sur les dernières perturbations connues à chaque rafraîchissement
+# du cache, ce qui permet à la propagation képlerienne à 2 corps de rester
+# précise jusqu'au prochain rafraîchissement.
+# ---------------------------------------------------------------------------
+_HORIZONS_URL = "https://ssd.jpl.nasa.gov/api/horizons.api"
+
+ASTEROID_HORIZONS_COMMAND = {
+    "Cérès": "1;",
+    "Pallas": "2;",
+    "Junon": "3;",
+    "Vesta": "4;",
+}
+
+COMET_HORIZONS_COMMAND = {
+    "2P/Encke": "2P;",
+    "67P/Churyumov-Gerasimenko": "67P;",
+    "21P/Giacobini-Zinner": "21P;",
+}
+
+_ORBITAL_CACHE_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "storage", "orbital_elements_cache.json"
+)
+_ORBITAL_CACHE_TTL_SEC = getattr(config, "ORBITAL_ELEMENTS_TTL_SEC", 24 * 3600)
+_orbital_mem_cache = {}
+
+
+def _load_orbital_disk_cache():
+    try:
+        with open(_ORBITAL_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_orbital_disk_cache(cache):
+    try:
+        os.makedirs(os.path.dirname(_ORBITAL_CACHE_FILE), exist_ok=True)
+        tmp_path = _ORBITAL_CACHE_FILE + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        os.replace(tmp_path, _ORBITAL_CACHE_FILE)
+    except Exception:
+        pass
+
+
+def _fetch_horizons_elements(command):
+    """Interroge l'API JPL Horizons pour les éléments orbitaux osculateurs
+    héliocentriques actuels (époque = aujourd'hui, référentiel J2000) de
+    l'objet désigné par `command` (ex: "1;" pour Cérès, "2P;" pour Encke).
+
+    Renvoie un dict {epoch_jd, a, e, i, node, peri, M0, q, Tp_jd} — lève une
+    exception si la requête échoue ou si la réponse est inattendue."""
+    now = Time.now()
+    start = now.utc.strftime("%Y-%m-%d")
+    stop = (now + 2 * u.day).utc.strftime("%Y-%m-%d")
+    params = {
+        "format": "json",
+        "COMMAND": f"'{command}'",
+        "OBJ_DATA": "'NO'",
+        "MAKE_EPHEM": "'YES'",
+        "EPHEM_TYPE": "'ELEMENTS'",
+        "CENTER": "'500@10'",  # héliocentrique
+        "REF_SYSTEM": "'J2000'",
+        "START_TIME": f"'{start}'",
+        "STOP_TIME": f"'{stop}'",
+        "STEP_SIZE": "'1d'",
+        "CSV_FORMAT": "'YES'",
+    }
+    resp = requests.get(_HORIZONS_URL, params=params, timeout=10)
+    resp.raise_for_status()
+    text = resp.json().get("result", "")
+
+    soe, eoe = text.index("$$SOE"), text.index("$$EOE")
+    data_lines = [l for l in text[soe + 5:eoe].splitlines() if l.strip()]
+    if not data_lines:
+        raise ValueError("Horizons: aucune ligne d'éléments dans la réponse")
+
+    # Colonnes CSV : JDTDB, Calendar Date, EC, QR, IN, OM, W, Tp, N, MA, TA, A, AD, PR,
+    fields = [f.strip() for f in data_lines[0].split(",")]
+    jd_tdb = float(fields[0])
+    ec, qr, inc, om, w, tp, _n, ma, _ta, a, _ad, _pr = (float(x) for x in fields[2:14])
+    return {
+        "epoch_jd": jd_tdb, "a": a, "e": ec, "i": inc,
+        "node": om, "peri": w, "M0": ma, "q": qr, "Tp_jd": tp,
+    }
+
+
+def _get_orbital_elements(kind, name, command, static_elements):
+    """Renvoie les éléments orbitaux d'un astéroïde/comète : tente JPL
+    Horizons (avec cache mémoire + disque, rafraîchi une fois par jour),
+    retombe sur les éléments figés `static_elements` si le réseau est
+    indisponible ou si l'objet n'a pas de commande Horizons connue."""
+    key = f"{kind}:{name}"
+    now = _time.time()
+
+    cached = _orbital_mem_cache.get(key)
+    if cached and now - cached["ts"] < _ORBITAL_CACHE_TTL_SEC:
+        return cached["elements"]
+
+    disk_cache = _load_orbital_disk_cache()
+    entry = disk_cache.get(key)
+    if entry and now - entry.get("ts", 0) < _ORBITAL_CACHE_TTL_SEC:
+        _orbital_mem_cache[key] = entry
+        return entry["elements"]
+
+    if command:
+        try:
+            elements = _fetch_horizons_elements(command)
+            new_entry = {"elements": elements, "ts": now}
+            _orbital_mem_cache[key] = new_entry
+            disk_cache[key] = new_entry
+            _save_orbital_disk_cache(disk_cache)
+            return elements
+        except Exception:
+            pass
+
+    if entry:  # cache disque périmé, mais mieux que des éléments figés très anciens
+        return entry["elements"]
+    return static_elements
+
+
+def get_asteroid_elements(name):
+    """Éléments orbitaux courants de l'astéroïde `name` (JPL Horizons,
+    rafraîchis automatiquement ; retombe sur les valeurs figées sinon)."""
+    static = ASTEROIDS[name]
+    command = ASTEROID_HORIZONS_COMMAND.get(name)
+    fetched = _get_orbital_elements("asteroid", name, command, None)
+    if fetched is None:
+        return {**static, "epoch_jd": ASTEROID_EPOCH_JD}
+    # H, G (magnitude absolue / paramètre de pente) ne sont pas renvoyés par
+    # une requête ELEMENTS : on garde les valeurs physiques figées.
+    return {**fetched, "H": static["H"], "G": static["G"]}
+
+
+def get_comet_elements(name):
+    """Éléments orbitaux courants de la comète `name` (JPL Horizons,
+    rafraîchis automatiquement ; retombe sur les valeurs figées sinon)."""
+    static = COMETS[name]
+    command = COMET_HORIZONS_COMMAND.get(name)
+    fetched = _get_orbital_elements("comet", name, command, None)
+    if fetched is None:
+        return {**static, "Tp_jd": Time(static["Tp"]).tdb.jd}
+    # M1, K1 (paramètres de magnitude cométaire) ne sont pas renvoyés par
+    # une requête ELEMENTS : on garde les valeurs figées.
+    return {**fetched, "M1": static["M1"], "K1": static["K1"]}
+
+
+# ---------------------------------------------------------------------------
 # Objets artificiels en orbite terrestre (satellites, stations, télescopes).
 # ---------------------------------------------------------------------------
 SATELLITE_NORAD_ID = {
@@ -144,7 +303,7 @@ _FALLBACK_TLE = {
 }
 
 _TLE_CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage", "tle_cache.json")
-_TLE_CACHE_TTL_SEC = 6 * 3600  # rafraîchir au plus toutes les 6h
+_TLE_CACHE_TTL_SEC = getattr(config, "TLE_CACHE_TTL_SEC", 6 * 3600)  # rafraîchir au plus toutes les 6h
 _tle_mem_cache = {}
 
 
@@ -275,7 +434,7 @@ def _asteroid_r_delta(elements, t):
     a, e = elements["a"], elements["e"]
     n = _GAUSS_K * a ** -1.5
     M0 = np.radians(elements["M0"])
-    dt_days = t.tdb.jd - ASTEROID_EPOCH_JD
+    dt_days = t.tdb.jd - elements["epoch_jd"]
     M = (M0 + n * dt_days) % (2 * np.pi)
     x, y, z = _kepler_heliocentric_xyz(a, e, elements["i"], elements["node"], elements["peri"], M)
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
@@ -287,8 +446,7 @@ def _comet_r_delta(elements, t):
     a = elements["q"] / (1 - elements["e"])
     e = elements["e"]
     n = _GAUSS_K * a ** -1.5
-    Tp_jd = Time(elements["Tp"]).tdb.jd
-    dt_days = t.tdb.jd - Tp_jd
+    dt_days = t.tdb.jd - elements["Tp_jd"]
     M = (n * dt_days) % (2 * np.pi)
     x, y, z = _kepler_heliocentric_xyz(a, e, elements["i"], elements["node"], elements["peri"], M)
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
@@ -296,17 +454,23 @@ def _comet_r_delta(elements, t):
     return coord, r, delta
 
 
-def asteroid_factory(elements):
-    """(times, location) -> SkyCoord géocentrique de l'astéroïde."""
+def asteroid_factory(name):
+    """(times, location) -> SkyCoord géocentrique de l'astéroïde `name`.
+    Les éléments orbitaux sont récupérés (JPL Horizons, cache ~1 jour) à
+    chaque appel, donc automatiquement tenus à jour sans redémarrage."""
     def factory(times, location):
+        elements = get_asteroid_elements(name)
         coord, _r, _delta = _asteroid_r_delta(elements, times)
         return coord
     return factory
 
 
-def comet_factory(elements):
-    """(times, location) -> SkyCoord géocentrique de la comète."""
+def comet_factory(name):
+    """(times, location) -> SkyCoord géocentrique de la comète `name`.
+    Les éléments orbitaux sont récupérés (JPL Horizons, cache ~1 jour) à
+    chaque appel, donc automatiquement tenus à jour sans redémarrage."""
     def factory(times, location):
+        elements = get_comet_elements(name)
         coord, _r, _delta = _comet_r_delta(elements, times)
         return coord
     return factory
@@ -315,7 +479,7 @@ def comet_factory(elements):
 def asteroid_magnitude(name, t, location):
     """Magnitude apparente approx. (formule H-G IAU standard pour les
     petits corps du système solaire)."""
-    elements = ASTEROIDS[name]
+    elements = get_asteroid_elements(name)
     _coord, r, delta = _asteroid_r_delta(elements, t)
     r, delta = float(r), float(delta)
     H, G = elements["H"], elements["G"]
@@ -333,7 +497,7 @@ def asteroid_magnitude(name, t, location):
 
 def comet_magnitude(name, t, location):
     """Magnitude apparente approx. (formule cométaire totale classique)."""
-    elements = COMETS[name]
+    elements = get_comet_elements(name)
     _coord, r, delta = _comet_r_delta(elements, t)
     r, delta = float(r), float(delta)
     M1, K1 = elements["M1"], elements["K1"]

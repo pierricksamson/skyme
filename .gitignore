@@ -5,5 +5,6 @@ ssl
 skyme.db
 wiki_cache.json
 tle_cache.json
+orbital_elements_cache.json
 *jpg
 appinventor*
