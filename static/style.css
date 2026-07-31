@@ -2225,3 +2225,20 @@ body.red-filter::after {
   font-size: 12px;
   color: var(--accent);
 }
+
+.info-physical-slot {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px 18px;
+}
+.info-physical-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.info-physical-item .info-next-label {
+  white-space: nowrap;
+}
+.info-physical-item .info-next-details {
+  white-space: nowrap;
+}
