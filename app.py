@@ -85,47 +85,136 @@ def _save_wiki_cache(cache):
 _WIKI_CACHE = _load_wiki_cache()
 
 
-def _wiki_title(name):
-    """Convertit le nom affiché dans l'app en titre de page Wikipedia.
+WIKI_TITLE_OVERRIDES = {
+    "Cérès": "Ceres (dwarf planet)",
+    "Pallas": "2 Pallas",
+    "Junon": "3 Juno",
+    "Vesta": "4 Vesta",
+    "2P/Encke": "Comet Encke",
+    "67P/Churyumov-Gerasimenko": "67P/Churyumov–Gerasimenko",
+    "21P/Giacobini-Zinner": "21P/Giacobini–Zinner",
+    "ISS (station spatiale)": "International Space Station",
+    "Télescope Hubble": "Hubble Space Telescope",
+    "Tiangong (station chinoise)": "Tiangong space station",
+    "M13 Hercules Cluster": "Messier 13",
+    "M15 Pegasus Cluster": "Messier 15",
+    "M22 Sagittarius Cluster": "Messier 22",
+    "M106 Galaxy": "Messier 106",
+    "Melotte 25 Hyades": "Hyades (star cluster)",
+    "Sharpless 2-155 Cave Nebula": "Cave Nebula",
+    "Azha": "Eta Eridani",
+    "Ain": "Epsilon Tauri",
+    "Mercury": "Mercury (planet)",
+}
 
-    Les objets du catalogue Deep Sky sont affichés avec leur préfixe
-    Messier ("M31 Andromeda Galaxy", "M42 Orion Nebula", ...), mais les
-    pages Wikipedia correspondantes n'utilisent pas ce préfixe (la page
-    s'appelle "Andromeda Galaxy", pas "M31 Andromeda Galaxy"). On retire
-    donc ce préfixe uniquement pour la requête à l'API ; le nom affiché
-    dans l'UI (o.name) n'est pas modifié.
-    """
-    stripped = re.sub(r"^M\d+\s+", "", name).strip()
-    return stripped or name
+# Suffixes désambiguïsateurs Wikipedia à essayer AVANT le nom brut pour ces
+# catégories : contrairement aux pages de désambiguïsation (détectables via
+# l'API), un nom d'étoile comme "Ain" a une page Wikipedia "légitime" mais
+# sans rapport (le département français de l'Ain) — impossible à détecter
+# après coup, donc on privilégie le suffixe dès le départ pour ces types.
+_WIKI_CATEGORY_SUFFIX = {"star": " (star)", "planet": " (planet)"}
+
+_WIKI_GENERIC_SUFFIXES = {
+    "galaxy", "galaxies", "nebula", "cluster",
+    "open cluster", "globular cluster", "star cluster",
+}
+
+_WIKI_LEADING_CATALOG_RE = re.compile(r"^(M|NGC|IC)\s*(\d+)\s*(.*)$")
+_WIKI_TRAILING_CATALOG_RE = re.compile(r"^(.*?)\s+(NGC|IC|M)\s*(\d+)$")
 
 
-def fetch_wikipedia_summary(title):
-    """Récupère un court résumé Wikipedia (image miniature + description)
-    pour un titre de page donné. Retourne toujours un dict avec les clés
-    'image' et 'description' (à None si indisponible / hors-ligne)."""
-    with _WIKI_CACHE_LOCK:
-        if title in _WIKI_CACHE:
-            return _WIKI_CACHE[title]
+def _wiki_title_candidates(name, category=None):
+    """Construit la liste ordonnée des titres Wikipedia à essayer pour un
+    nom d'objet affiché dans l'app (nom usuel, identifiant de catalogue,
+    override explicite, nom brut en dernier recours). `category` (star,
+    planet, ...) permet de prioriser un suffixe désambiguïsateur avant le
+    nom brut quand on sait par avance qu'il risque d'être ambigu."""
+    candidates = []
 
+    override = WIKI_TITLE_OVERRIDES.get(name)
+    if override:
+        candidates.append(override)
+
+    m = _WIKI_LEADING_CATALOG_RE.match(name)
+    t = _WIKI_TRAILING_CATALOG_RE.match(name)
+    if m:
+        prefix, num, rest = m.group(1), m.group(2), m.group(3).strip()
+        catalog_id = f"Messier {num}" if prefix == "M" else f"{prefix} {num}"
+        if rest and rest.lower() not in _WIKI_GENERIC_SUFFIXES:
+            candidates.append(rest)
+        candidates.append(catalog_id)
+        if prefix == "M":
+            candidates.append(f"M{num}")
+    elif t:
+        rest, prefix, num = t.group(1).strip(), t.group(2), t.group(3)
+        catalog_id = f"Messier {num}" if prefix == "M" else f"{prefix} {num}"
+        if rest and rest.lower() not in _WIKI_GENERIC_SUFFIXES:
+            candidates.append(rest)
+        candidates.append(catalog_id)
+        if prefix == "M":
+            candidates.append(f"M{num}")
+    else:
+        suffix = _WIKI_CATEGORY_SUFFIX.get(category)
+        if suffix:
+            candidates.append(f"{name}{suffix}")
+        candidates.append(name)
+        candidates.append(f"{name} (star)")
+        candidates.append(f"{name} (planet)")
+
+    candidates.append(name)
+
+    seen, out = set(), []
+    for c in candidates:
+        if c and c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+def _fetch_wiki_page(title):
+    """Interroge l'API REST Wikipedia pour un titre de page donné. Renvoie
+    toujours un dict {'image', 'description'} (valeurs à None si absentes
+    ou si la page est une page de désambiguïsation, qui n'apporte aucune
+    info exploitable sur l'objet précis)."""
     result = {"image": None, "description": None}
     try:
         resp = requests.get(
             "https://en.wikipedia.org/api/rest_v1/page/summary/"
-            + requests.utils.quote(_wiki_title(title)),
+            + requests.utils.quote(title),
             headers={"User-Agent": "Skyme/1.0 (astronomy app; contact: admin@skyme.local)"},
             timeout=5,
         )
         if resp.ok:
             data = resp.json()
+            if data.get("type") == "disambiguation":
+                return result
             thumb = data.get("thumbnail") or data.get("originalimage")
             if thumb:
                 result["image"] = thumb.get("source")
             result["description"] = data.get("extract")
     except requests.RequestException:
         pass
+    return result
+
+
+def fetch_wikipedia_summary(name, category=None):
+    """Récupère un court résumé Wikipedia (image miniature + description)
+    pour un objet de l'app, en essayant plusieurs titres candidats jusqu'à
+    obtenir un résultat exploitable. Retourne toujours un dict avec les clés
+    'image' et 'description' (à None si indisponible pour tous les
+    candidats / hors-ligne)."""
+    with _WIKI_CACHE_LOCK:
+        if name in _WIKI_CACHE:
+            return _WIKI_CACHE[name]
+
+    result = {"image": None, "description": None}
+    for title in _wiki_title_candidates(name, category):
+        result = _fetch_wiki_page(title)
+        if result["image"] or result["description"]:
+            break
 
     with _WIKI_CACHE_LOCK:
-        _WIKI_CACHE[title] = result
+        _WIKI_CACHE[name] = result
         _save_wiki_cache(_WIKI_CACHE)
     return result
 
@@ -134,9 +223,10 @@ def fetch_wikipedia_summary(title):
 @login_required
 def object_info():
     name = (request.args.get("name") or "").strip()
+    category = (request.args.get("category") or "").strip() or None
     if not name:
         return jsonify({"error": "name required"}), 400
-    return jsonify(fetch_wikipedia_summary(name))
+    return jsonify(fetch_wikipedia_summary(name, category))
 
 
 STEP_MINUTES = config.STEP_MINUTES
