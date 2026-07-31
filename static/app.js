@@ -3636,7 +3636,17 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     if (!catalogItem) return;
     const planLoc = getPlanLocation();
     const planPhaseCtx = { dateStr: planCurrentDate, lat: planLoc.lat, lon: planLoc.lon, elev: planLoc.elev };
-    openInfo(catalogItem, planPhaseCtx);
+    // `catalogItem` vient de /api/catalog/list, calculé pour "maintenant"
+    // et le lieu courant de l'app : ses rise_iso/set_iso/peak_altitude ne
+    // correspondent pas forcément à la nuit et au lieu du plan en cours
+    // d'édition. `planScheduleByName` contient, lui, les horaires réels
+    // recalculés pour cette date/lieu précis (voir loadPlanSchedule) : on
+    // les fusionne par-dessus pour que la fiche affichée (lever/coucher/
+    // durée/altitude/magnitude) corresponde bien à l'environnement du plan
+    // (« Prévoir »), comme dans l'agenda.
+    const sched = planScheduleByName[name];
+    const infoSource = sched ? { ...catalogItem, ...sched } : catalogItem;
+    openInfo(infoSource, planPhaseCtx);
   }
 
   const planCatalogListEl = document.getElementById('planCatalogList');
