@@ -2227,18 +2227,26 @@ body.red-filter::after {
 }
 
 .info-physical-slot {
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 6px 18px;
+  display: grid;
+  grid-template-columns: auto 1fr auto 1fr;
+  align-items: center;
+  row-gap: 6px;
+  column-gap: 10px;
 }
 .info-physical-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  display: contents;
 }
 .info-physical-item .info-next-label {
   white-space: nowrap;
 }
 .info-physical-item .info-next-details {
   white-space: nowrap;
+  justify-self: start;
+}
+.info-physical-item:nth-child(3) .info-next-label,
+.info-physical-item:nth-child(3) .info-next-details,
+.info-physical-item:nth-child(4) .info-next-label,
+.info-physical-item:nth-child(4) .info-next-details {
+  border-top: 1px solid var(--hairline);
+  padding-top: 6px;
 }
