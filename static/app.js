@@ -48,6 +48,9 @@
   // data.lane_count / o.lane calculés côté serveur, ce qui évite de tout
   // recalculer côté client à chaque changement de filtre).
   const tlFilterState = { cat: 'all', maxMag: null, journal: 'all' };
+  // Filtre de la section "Ajouter des objets" dans Prévoir (favoris, catégorie,
+  // magnitude, journal vu/pas vu), sur le même modèle que tlFilterState.
+  const planFilterState = { cat: 'all', maxMag: null, journal: 'all' };
 
   function objectPassesFilter(o, filterState) {
     if (filterState.cat === 'favorites') {
@@ -1588,6 +1591,17 @@ function renderInfoPhase(data) {
     onChange: () => { if (agendaTtData) renderAgendaTimeline(agendaTtData, false); },
   });
 
+  wireFilterPanel({
+    toggleBtnId: 'planFilterBtn',
+    panelId: 'planFilterPanel',
+    chipSelector: '.plan-filter-chip',
+    magInputId: 'planFilterMag',
+    magClearId: 'planFilterMagClear',
+    countId: 'planFilterCount',
+    filterState: planFilterState,
+    onChange: () => renderPlanCatalogList(),
+  });
+
   function toDateStr(d) {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -2989,7 +3003,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
   let planCurrentDate = toDateStr(today0);
   let planSelectedNames = new Set();
   let planExists = false;
-  let planCatalogFilter = 'all';
+
   let planCatalogSearch = '';
   let planDatesWithPlan = {}; // { 'YYYY-MM-DD': nombre d'objets prévus }
   let planInitialized = false;
@@ -3577,6 +3591,17 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     });
   });
 
+  // 3. Prévoir (plan) : filtre "Ajouter des objets"
+  document.querySelectorAll('.plan-journal-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      planFilterState.journal = chip.dataset.journal;
+      document.querySelectorAll('.plan-journal-chip').forEach(c => {
+        c.classList.toggle('active', c.dataset.journal === planFilterState.journal);
+      });
+      renderPlanCatalogList();
+    });
+  });
+
   async function renderPlanCatalogList() {
     const listEl = document.getElementById('planCatalogList');
     if (!listEl) return;
@@ -3587,15 +3612,14 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
     }
     const term = normalizeSearch(planCatalogSearch.trim());
     const filtered = items.filter((o) => {
-      if (planCatalogFilter !== 'all' && o.category !== planCatalogFilter) return false;
-      
-
+      if (!objectPassesFilter(o, planFilterState)) return false;
       if (term && !normalizeSearch(o.name).includes(term)) return false;
       return true;
     });
     listEl.innerHTML = filtered.length
       ? filtered.map(planRowHtml).join('')
       : '<div class="lib-empty">Aucun objet ne correspond.</div>';
+    updateFilterCount('planFilterCount', items.length, filtered.length);
   }
 
   function renderPlanSelectedList() {
@@ -3673,13 +3697,7 @@ document.getElementById('agendaTtNext').addEventListener('click', () => {
       renderPlanCatalogList();
     });
   }
-  document.querySelectorAll('.plan-filter-chip').forEach((chip) => {
-    chip.addEventListener('click', () => {
-      planCatalogFilter = chip.dataset.cat;
-      document.querySelectorAll('.plan-filter-chip').forEach((c) => c.classList.toggle('active', c === chip));
-      renderPlanCatalogList();
-    });
-  });
+
 
   const planPrevDayBtn = document.getElementById('planPrevDay');
   if (planPrevDayBtn) planPrevDayBtn.addEventListener('click', () => {

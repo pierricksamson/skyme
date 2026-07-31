@@ -459,21 +459,42 @@
             <button id="planDeleteBtn" type="button" class="settings-discard-btn hidden" style="flex:none; margin-top: 20px;">Supprimer</button>
           </div>
 
-          <div class="section-heading"><h2>Ajouter des objets</h2></div>
+          <div class="section-heading">
+            <h2>Ajouter des objets</h2>
+            <button type="button" id="planFilterBtn" class="icon-btn tl-filter-btn" title="Filtrer">
+              <i class='bx bx-filter-alt'></i>
+            </button>
+          </div>
           <div class="lib-search-row">
             <input type="text" id="planSearchInput" class="lib-search-input" placeholder="Rechercher un objet…" autocomplete="off">
           </div>
-          <div class="lib-filter-chips">
-            <button type="button" class="lib-chip plan-filter-chip active" data-cat="all">Tout</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="moon">Lune</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="planet">Planètes</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="star">Étoiles</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="galaxy">Galaxies</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="nebula">Nébuleuses</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="cluster">Amas</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="comet">Comètes</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="asteroid">Astéroïdes</button>
-            <button type="button" class="lib-chip plan-filter-chip" data-cat="satellite">Satellites</button>
+          <div id="planFilterPanel" class="tl-filter-panel hidden">
+            <div class="tl-filter-chips">
+              <button type="button" class="lib-chip plan-filter-chip active" data-cat="all">Tout</button>
+              <button type="button" class="lib-chip plan-filter-chip lib-chip-fav" data-cat="favorites">★ Favoris</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="moon">Lune</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="planet">Planètes</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="star">Étoiles</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="galaxy">Galaxies</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="nebula">Nébuleuses</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="cluster">Amas</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="comet">Comètes</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="asteroid">Astéroïdes</button>
+              <button type="button" class="lib-chip plan-filter-chip" data-cat="satellite">Satellites</button>
+            </div>
+            <div class="tl-filter-mag-row">
+              <label for="planFilterMag">Magnitude max</label>
+              <input type="number" id="planFilterMag" step="0.1" placeholder="Aucune limite">
+              <button type="button" id="planFilterMagClear" class="tl-filter-mag-clear" title="Effacer">✕</button>
+            </div>
+            <label style="font-size: 12px; color: var(--text-muted); display: block; margin-top: 4px;">Journal d'observation</label>
+            <div class="tl-filter-chips" style="margin-bottom: 8px;">
+              <button type="button" class="lib-chip plan-journal-chip active" data-journal="all">Tout</button>
+              <button type="button" class="lib-chip plan-journal-chip" data-journal="seen">Vu</button>
+              <button type="button" class="lib-chip plan-journal-chip" data-journal="failed">Échec</button>
+              <button type="button" class="lib-chip plan-journal-chip" data-journal="unattempted">Pas tenté</button>
+            </div>
+            <p id="planFilterCount" class="tl-filter-count"></p>
           </div>
           <div id="planCatalogList" class="lib-list"></div>
         </div>
